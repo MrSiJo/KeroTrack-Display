@@ -1,46 +1,89 @@
-# Aura
+# KeroTrack Display (formerly Aura)
 
-Aura is a simple weather widget that runs on ESP32-2432S028R ILI9341 devices with a 2.8" screen. These devices are sometimes called a "CYD" or Cheap Yellow Display.
+This project is a fork of the original [Aura](https://github.com/Surrey-Homeware/Aura) which was made [Aura weather display](https://makerworld.com/en/models/1382304-aura-smart-weather-forecast-display), repurposed to act as a real-time oil tank monitor for the [KeroTrack](https://github.com/your-org/KeroTrack) system. Instead of showing weather data, this display now retrieves and visualizes oil tank data published to an MQTT broker by KeroTrack sensors and backend services.
 
-This is just the source code for the project. This project includes a case design and assembly instructions. The complete instructions are available
-here: https://makerworld.com/en/models/1382304-aura-smart-weather-forecast-display
+## Project Overview
 
-### License
+KeroTrack Display runs on ESP32-2432S028R ILI9341-based devices ("CYD" or Cheap Yellow Display, 2.8" screen). It connects to WiFi, subscribes to MQTT topics, and shows:
+- Oil level (litres, % full, bars)
+- Temperature
+- Days remaining (estimation)
+- Cost to fill, litres to order, and other tank stats
 
-You can use the weather.ino code here under the terms of the GPL 3.0 license.
+The UI is built with [lvgl](https://lvgl.io/) and [TFT_eSPI](https://github.com/Bodmer/TFT_eSPI), and is optimized for touch and low-power operation.
 
-The icons are not included in that license. See "Thanks" below for details on the icons.
+It was coded using Cursor and I have no prior experience using C or compiling/deploying to CYD/ESP32 devices.
 
-### How to compile:
+## How to Compile & Flash
 
-1. Configure Arduino IDE 
-    1. for "esp32" board with a device type of "ESP32 Dev Module" and
-    1. set "Tools -> Partition Scheme" to "Huge App (3MB No OTA/1MB SPIFFS)"
-1. Install the libraries below in Arduino IDE
-1. Put the source code folders that are in this folder in ~/Documents/Arduino/
-    1. Note the included config files for lvgl and TFT_eSPI need to be dropped in their respective folders
-1. Install and run
+1. **Configure Arduino IDE:**
+    - Board: "ESP32 Dev Module"
+    - Tools → Partition Scheme: "Huge App (3MB No OTA/1MB SPIFFS)"
+2. **Install Required Libraries:**
+    - ArduinoJson 7.4.1
+    - HttpClient 2.2.0
+    - TFT_eSPI 2.5.43_
+    - WifiManager 2.0.17
+    - XPT2046_Touchscreen 1.4
+    - lvgl 9.2.2
+    - PubSubClient (for MQTT)
+3. **Source Code Placement:**
+    - Place the source code folders in `~/Documents/Arduino/`.
+    - Copy the included config files for `lvgl`, `TFT_eSPI` and `PubSubClient` into their respective library folders (see `lvgl/src/lv_conf.h`, `TFT_eSPI/User_Setup.h` and `PubSubClient/src/PubSubClient.h`).
+4. **Build and Upload:**
+    - Open `KeroDisplay/kerodisplay.ino` in Arduino IDE and upload to your ESP32 device.
 
-### Libraries required to compile:
+## Configuration
 
-- ArduinoJson 7.4.1
-- HttpClient 2.2.0
-- TFT_eSPI 2.5.43_
-- WifiManager 2.0.17
-- XPT2046_Touchscreen 1.4
-- lvgl 9.2.2
+- On first boot, the device will start and you'll need to connect to a wifi network called `KeroTrack` and open a browser to http://192.168.4.1.  From there you can configure your wifi network to connect to and your MQTT broker settings.
+- After configuration, it will connect to the specified MQTT broker and subscribe to KeroTrack topics (e.g., `oiltank/level`, `oiltank/analysis`).
 
-### Thanks & Credits
+## Features
 
-- Weather icons from https://github.com/mrdarrengriffin/google-weather-icons/tree/main/v2
-- Thanks to [lvgl](https://lvgl.io/), a great library for UIs on ESP32 devices that made this much easier
-- Thanks to [witnessmenow](https://github.com/witnessmenow/)'s [CYD Github repo](https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display) for dev board reference information
-- Double thanks to [witnessmenow](https://github.com/witnessmenow/) for the [ESP32 web flashing tutorial](https://github.com/witnessmenow/ESP-Web-Tools-Tutorial)
-- Thanks to [Random Nerd Tutorials](https://randomnerdtutorials.com/) for helpful ESP32 / CYD information, especially with [setting up LVGL](https://randomnerdtutorials.com/esp32-cyd-lvgl-line-chart/)
-- Thanks to these sweet libraries that made this possible:
-	- [ArduinoJson](https://arduinojson.org/)
-	- [HttpClient](https://github.com/amcewen/HttpClient)
-	- [TFT_eSPI](https://github.com/Bodmer/TFT_eSPI)
-	- [WifiManager](https://github.com/tzapu/WiFiManager)
-	- [XPT2046_Touchscreen](https://github.com/PaulStoffregen/XPT2046_Touchscreen)
-	- [lvgl](https://lvgl.io/)
+- **Real-time Oil Tank Monitoring:**
+  - Displays live oil tank data from MQTT topics published by KeroTrack, including litres remaining, percentage full, temperature, litres to order, cost to fill, and more.
+  - Visual bar indicator with color gradient (green/yellow/red) to show oil level and highlight low levels.
+
+- **Touchscreen User Interface:**
+  - Two main screens:
+    - **Tank Status:** Litres remaining, percentage full, temperature, days left, and oil level bar.
+    - **Order/Cost Info:** Litres to order, price per litre (PPL), and estimated cost to fill.
+  - Tap anywhere to switch between screens (with debounce).
+  - Auto-switches between screens every 2 minutes.
+
+- **Backlight Scheduling & Power Management:**
+  - Automatically dims the display between 23:00 and 06:00 (based on NTP time).
+  - Touching the screen during dim hours temporarily wakes the backlight.
+  - Always-on fallback if NTP time is not available.
+
+- **WiFi & MQTT Setup via Captive Portal:**
+  - On first boot (or if WiFi is not configured), launches a WiFiManager captive portal for easy WiFi and MQTT configuration.
+  - MQTT credentials and broker address are stored in device preferences.
+
+- **Robust MQTT Integration:**
+  - Subscribes to both oil tank level and analysis topics.
+  - Supports wildcard topic subscription for debugging.
+  - Updates the UI instantly when new MQTT data arrives.
+
+- **Persistent Preferences:**
+  - Remembers WiFi, MQTT, and brightness settings across reboots.
+
+- **Visual Alerts & Robustness:**
+  - Color-coded bar indicator for oil level.
+  - Handles WiFi and MQTT connection failures gracefully.
+  - Displays setup and status screens for user feedback.
+
+## Credits & Thanks
+
+- Forked from [Aura](https://github.com/Surrey-Homeware/Aura)
+- Uses the 3d printed case for the CYD on [Makerworld](https://makerworld.com/en/models/1382304-aura-smart-weather-forecast-display)
+- [lvgl](https://lvgl.io/) for UI
+- [TFT_eSPI](https://github.com/Bodmer/TFT_eSPI) for display driver
+- [WifiManager](https://github.com/tzapu/WiFiManager) for easy setup
+- [XPT2046_Touchscreen](https://github.com/PaulStoffregen/XPT2046_Touchscreen)
+- [PubSubClient](https://github.com/knolleary/pubsubclient) for MQTT
+- [KeroTrack](https://github.com/MrSiJo/KeroTrack) for backend and data
+
+## License
+
+The code is available under the GPL 3.0 license. See original Aura repo for icon and asset licenses.

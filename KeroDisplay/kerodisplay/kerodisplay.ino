@@ -601,7 +601,84 @@ void create_screen3() {
   if (screen3) lv_obj_clean(screen3);
   else screen3 = lv_obj_create(NULL);
   create_chrome(screen3, &s3.chrome, "..*");
-  // Content widgets added in Task 9.
+
+  lv_obj_t *c = s3.chrome.content;
+
+  s3.lbl_avg_monthly = lv_label_create(c);
+  lv_label_set_text(s3.lbl_avg_monthly, "£--");
+  lv_obj_set_style_text_font(s3.lbl_avg_monthly, &lv_font_montserrat_48, LV_PART_MAIN);
+  lv_obj_set_style_text_color(s3.lbl_avg_monthly, lv_color_hex(0xeeeeee), LV_PART_MAIN);
+  lv_obj_align(s3.lbl_avg_monthly, LV_ALIGN_TOP_MID, 0, 20);
+
+  lv_obj_t *sub = lv_label_create(c);
+  lv_label_set_text(sub, "AVG MONTHLY");
+  lv_obj_set_style_text_font(sub, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(sub, lv_color_hex(0x888888), LV_PART_MAIN);
+  lv_obj_set_style_text_letter_space(sub, 3, LV_PART_MAIN);
+  lv_obj_align(sub, LV_ALIGN_TOP_MID, 0, 80);
+
+  s3.lbl_avg_weekly = lv_label_create(c);
+  lv_label_set_text(s3.lbl_avg_weekly, "£-- /wk");
+  lv_obj_set_style_text_font(s3.lbl_avg_weekly, &lv_font_montserrat_16, LV_PART_MAIN);
+  lv_obj_set_style_text_color(s3.lbl_avg_weekly, lv_color_hex(0xaaaaaa), LV_PART_MAIN);
+  lv_obj_align(s3.lbl_avg_weekly, LV_ALIGN_TOP_LEFT, 30, 110);
+
+  s3.lbl_avg_annual = lv_label_create(c);
+  lv_label_set_text(s3.lbl_avg_annual, "£-- /yr");
+  lv_obj_set_style_text_font(s3.lbl_avg_annual, &lv_font_montserrat_16, LV_PART_MAIN);
+  lv_obj_set_style_text_color(s3.lbl_avg_annual, lv_color_hex(0xaaaaaa), LV_PART_MAIN);
+  lv_obj_align(s3.lbl_avg_annual, LV_ALIGN_TOP_RIGHT, -30, 110);
+
+  // Divider
+  lv_obj_t *div = lv_obj_create(c);
+  lv_obj_set_size(div, 80, 1);
+  lv_obj_set_style_bg_color(div, lv_color_hex(0x444b58), LV_PART_MAIN);
+  lv_obj_set_style_border_width(div, 0, LV_PART_MAIN);
+  lv_obj_align(div, LV_ALIGN_TOP_MID, 0, 145);
+
+  // To-fill cell (container so we can toggle bg/border)
+  s3.cell_to_fill = lv_obj_create(c);
+  lv_obj_set_size(s3.cell_to_fill, 100, 60);
+  lv_obj_align(s3.cell_to_fill, LV_ALIGN_TOP_LEFT, 20, 165);
+  lv_obj_set_style_bg_opa(s3.cell_to_fill, LV_OPA_TRANSP, LV_PART_MAIN);
+  lv_obj_set_style_border_width(s3.cell_to_fill, 1, LV_PART_MAIN);
+  lv_obj_set_style_border_color(s3.cell_to_fill, lv_color_hex(0x444b58), LV_PART_MAIN);
+  lv_obj_set_style_radius(s3.cell_to_fill, 6, LV_PART_MAIN);
+  lv_obj_set_style_pad_all(s3.cell_to_fill, 4, LV_PART_MAIN);
+  lv_obj_clear_flag(s3.cell_to_fill, LV_OBJ_FLAG_SCROLLABLE);
+
+  s3.lbl_cost_to_fill = lv_label_create(s3.cell_to_fill);
+  lv_label_set_text(s3.lbl_cost_to_fill, "£--");
+  lv_obj_set_style_text_font(s3.lbl_cost_to_fill, &lv_font_montserrat_28, LV_PART_MAIN);
+  lv_obj_set_style_text_color(s3.lbl_cost_to_fill, lv_color_hex(0xeeeeee), LV_PART_MAIN);
+  lv_obj_align(s3.lbl_cost_to_fill, LV_ALIGN_TOP_MID, 0, 0);
+
+  s3.lbl_to_fill_label = lv_label_create(s3.cell_to_fill);
+  lv_label_set_text(s3.lbl_to_fill_label, "to fill");
+  lv_obj_set_style_text_font(s3.lbl_to_fill_label, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(s3.lbl_to_fill_label, lv_color_hex(0x888888), LV_PART_MAIN);
+  lv_obj_align(s3.lbl_to_fill_label, LV_ALIGN_BOTTOM_MID, 0, 0);
+
+  s3.pip = lv_obj_create(s3.cell_to_fill);
+  lv_obj_set_size(s3.pip, 12, 12);
+  lv_obj_set_style_radius(s3.pip, 6, LV_PART_MAIN);
+  lv_obj_set_style_bg_color(s3.pip, lv_color_hex(0x4ade80), LV_PART_MAIN);
+  lv_obj_set_style_border_width(s3.pip, 2, LV_PART_MAIN);
+  lv_obj_set_style_border_color(s3.pip, lv_color_hex(0x181c24), LV_PART_MAIN);
+  lv_obj_align(s3.pip, LV_ALIGN_TOP_RIGHT, 4, -4);
+  lv_obj_add_flag(s3.pip, LV_OBJ_FLAG_HIDDEN);
+
+  s3.lbl_ppl = lv_label_create(c);
+  lv_label_set_text(s3.lbl_ppl, "-- p/L");
+  lv_obj_set_style_text_font(s3.lbl_ppl, &lv_font_montserrat_28, LV_PART_MAIN);
+  lv_obj_set_style_text_color(s3.lbl_ppl, lv_color_hex(0xeeeeee), LV_PART_MAIN);
+  lv_obj_align(s3.lbl_ppl, LV_ALIGN_TOP_RIGHT, -45, 175);
+
+  lv_obj_t *ppl_label = lv_label_create(c);
+  lv_label_set_text(ppl_label, "current ppl");
+  lv_obj_set_style_text_font(ppl_label, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(ppl_label, lv_color_hex(0x888888), LV_PART_MAIN);
+  lv_obj_align(ppl_label, LV_ALIGN_TOP_RIGHT, -30, 215);
 }
 
 // Format "2026-08-23 14:32:00" -> "23 Aug 2026". Returns false on parse failure.
@@ -693,9 +770,46 @@ static void update_screen2() {
   else        lv_obj_add_flag(s2.lbl_refill_note,   LV_OBJ_FLAG_HIDDEN);
 }
 
+static void update_screen3() {
+  if (!screen3) return;
+  char buf[24];
+  snprintf(buf, sizeof(buf), "£%.0f", oilTankCost.avg_monthly_cost);
+  lv_label_set_text(s3.lbl_avg_monthly, buf);
+  snprintf(buf, sizeof(buf), "£%.0f /wk", oilTankCost.avg_weekly_cost);
+  lv_label_set_text(s3.lbl_avg_weekly, buf);
+  snprintf(buf, sizeof(buf), "£%.0f /yr", oilTankCost.avg_annual_cost);
+  lv_label_set_text(s3.lbl_avg_annual, buf);
+
+  snprintf(buf, sizeof(buf), "£%.0f", oilTankData.cost_to_fill);
+  lv_label_set_text(s3.lbl_cost_to_fill, buf);
+
+  snprintf(buf, sizeof(buf), "%.1f p/L", oilTankData.current_ppl);
+  lv_label_set_text(s3.lbl_ppl, buf);
+
+  // 500L threshold styling on the to-fill cell
+  bool order_ready = oilTankData.litres_to_order >= MIN_ORDER_LITRES;
+  if (order_ready) {
+    lv_obj_set_style_bg_opa(s3.cell_to_fill, LV_OPA_30, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(s3.cell_to_fill, lv_color_hex(0x1e3d2a), LV_PART_MAIN);
+    lv_obj_set_style_border_color(s3.cell_to_fill, lv_color_hex(0x4ade80), LV_PART_MAIN);
+    lv_obj_set_style_text_color(s3.lbl_cost_to_fill, lv_color_hex(0x4ade80), LV_PART_MAIN);
+    lv_obj_set_style_text_color(s3.lbl_to_fill_label, lv_color_hex(0x4ade80), LV_PART_MAIN);
+    lv_label_set_text(s3.lbl_to_fill_label, "order ready");
+    lv_obj_clear_flag(s3.pip, LV_OBJ_FLAG_HIDDEN);
+  } else {
+    lv_obj_set_style_bg_opa(s3.cell_to_fill, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_color(s3.cell_to_fill, lv_color_hex(0x444b58), LV_PART_MAIN);
+    lv_obj_set_style_text_color(s3.lbl_cost_to_fill, lv_color_hex(0xeeeeee), LV_PART_MAIN);
+    lv_obj_set_style_text_color(s3.lbl_to_fill_label, lv_color_hex(0x888888), LV_PART_MAIN);
+    lv_label_set_text(s3.lbl_to_fill_label, "to fill");
+    lv_obj_add_flag(s3.pip, LV_OBJ_FLAG_HIDDEN);
+  }
+}
+
 void update_oiltank_ui() {
   update_screen1();
   update_screen2();
+  update_screen3();
 }
 
 static void format_age(char *out, size_t cap, unsigned long age_ms) {

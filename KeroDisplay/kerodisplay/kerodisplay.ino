@@ -1036,7 +1036,10 @@ static void load_screen(int n) {
     case 2: lv_scr_load(screen2); break;
     default: n = 3; lv_scr_load(screen3); break;
   }
-  if (auto_switch_timer) lv_timer_set_period(auto_switch_timer, hold_for(n));
+  if (auto_switch_timer) {
+    lv_timer_set_period(auto_switch_timer, hold_for(n));
+    lv_timer_reset(auto_switch_timer);
+  }
 }
 
 void switch_screen() {

@@ -110,6 +110,7 @@ static char weather_lon[16] = "";
 struct GeocodeMatch {
   String name;
   String country;
+  String country_code;  // 2-letter ISO code, used for compact saved name
   String admin1;
   String latitude;
   String longitude;
@@ -210,7 +211,7 @@ typedef struct {
   screen_chrome_t chrome;
   lv_obj_t *icon_hero;        // big weather icon (20x20 native, scaled 3x)
   lv_obj_t *lbl_temp;         // big current temp
-  lv_obj_t *lbl_descriptor;   // "feels Y° · Light rain"
+  lv_obj_t *lbl_descriptor;   // "feels Y°, Light rain"
   lv_obj_t *lbl_location;     // location name
   lv_obj_t *daily_icon[3];    // 3-day forecast row icons (20x20 native)
   lv_obj_t *daily_day[3];     // "Today" / day-of-week labels
@@ -625,6 +626,7 @@ static int geocode_location(const char *query, GeocodeMatch *out, int max_result
     if (count >= max_results) break;
     out[count].name = v["name"].as<String>();
     out[count].country = v["country"].as<String>();
+    out[count].country_code = v["country_code"].as<String>();
     out[count].admin1 = v["admin1"].as<String>();
     char lat[16], lon[16];
     snprintf(lat, sizeof(lat), "%.4f", v["latitude"].as<float>());
@@ -876,16 +878,21 @@ static void handle_search_location() {
     "<p>Pick the match that fits best:</p>"
     "<form method='POST' action='/save_location'>");
   for (int i = 0; i < count; i++) {
+    // Long label shown to the user for disambiguation.
     String label = matches[i].name;
     if (matches[i].admin1.length()) label += ", " + matches[i].admin1;
     if (matches[i].country.length()) label += ", " + matches[i].country;
+    // Short label saved to NVS and displayed on screen 4 (e.g. "Surrey, GB").
+    String shortLabel = matches[i].name;
+    if (matches[i].country_code.length()) shortLabel += ", " + matches[i].country_code;
+    else if (matches[i].country.length())  shortLabel += ", " + matches[i].country;
     html += "<label class='match'>"
             "<input type='radio' name='choice' value='" + String(i) + "'";
     if (i == 0) html += " checked";
     html += "><span class='name'>" + label + "</span>"
             "<span class='coord'>" + matches[i].latitude + ", " + matches[i].longitude + "</span></label>";
 
-    html += "<input type='hidden' name='name_" + String(i) + "' value='" + label + "'>";
+    html += "<input type='hidden' name='name_" + String(i) + "' value='" + shortLabel + "'>";
     html += "<input type='hidden' name='lat_" + String(i) + "' value='" + matches[i].latitude + "'>";
     html += "<input type='hidden' name='lon_" + String(i) + "' value='" + matches[i].longitude + "'>";
   }
@@ -1287,6 +1294,9 @@ void create_screen4() {
   lv_label_set_text(s4.lbl_location, "(not configured)");
   lv_obj_set_style_text_font(s4.lbl_location, &lv_font_montserrat_latin_14, LV_PART_MAIN);
   lv_obj_set_style_text_color(s4.lbl_location, lv_color_hex(0x888888), LV_PART_MAIN);
+  lv_obj_set_width(s4.lbl_location, SCREEN_WIDTH - 20);
+  lv_label_set_long_mode(s4.lbl_location, LV_LABEL_LONG_DOT);
+  lv_obj_set_style_text_align(s4.lbl_location, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
   lv_obj_align(s4.lbl_location, LV_ALIGN_TOP_MID, 0, 160);
 
   // Divider.
@@ -1486,7 +1496,7 @@ static void update_screen4() {
   snprintf(buf, sizeof(buf), "%.0f\xc2\xb0", weatherData.temp_now);
   lv_label_set_text(s4.lbl_temp, buf);
 
-  snprintf(buf, sizeof(buf), "feels %.0f\xc2\xb0 \xc2\xb7 %s",
+  snprintf(buf, sizeof(buf), "feels %.0f\xc2\xb0, %s",
            weatherData.temp_feels, describe_weather(weatherData.code_now));
   lv_label_set_text(s4.lbl_descriptor, buf);
 

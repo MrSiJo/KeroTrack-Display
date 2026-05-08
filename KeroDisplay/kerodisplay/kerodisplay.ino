@@ -405,6 +405,10 @@ void loop() {
   delay(5);
 }
 
+static void ribbon_pulse_anim(void *obj, int32_t v) {
+  lv_obj_set_style_bg_opa((lv_obj_t*)obj, v, LV_PART_MAIN);
+}
+
 static void create_chrome(lv_obj_t *parent, screen_chrome_t *out, const char *dots_str) {
   // Background (matches existing dark theme)
   lv_obj_set_style_bg_color(parent, lv_color_hex(0x181c24), LV_PART_MAIN);
@@ -465,6 +469,17 @@ static void create_chrome(lv_obj_t *parent, screen_chrome_t *out, const char *do
   lv_obj_set_style_text_font(out->ribbon_label, &lv_font_montserrat_16, LV_PART_MAIN);
   lv_obj_set_style_text_color(out->ribbon_label, lv_color_hex(0xffffff), LV_PART_MAIN);
   lv_obj_align(out->ribbon_label, LV_ALIGN_CENTER, 0, 0);
+
+  // Soft pulse on the ribbon (continuous; harmless when ribbon is hidden)
+  lv_anim_t a;
+  lv_anim_init(&a);
+  lv_anim_set_var(&a, out->ribbon);
+  lv_anim_set_values(&a, LV_OPA_70, LV_OPA_COVER);
+  lv_anim_set_time(&a, 800);
+  lv_anim_set_playback_time(&a, 800);
+  lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
+  lv_anim_set_exec_cb(&a, ribbon_pulse_anim);
+  lv_anim_start(&a);
 
   // --- Content container (everything between status bar and dots) ---
   out->content = lv_obj_create(parent);
@@ -812,7 +827,27 @@ static void update_screen3() {
   }
 }
 
+static void apply_leak_to(screen_chrome_t *ch, bool leak) {
+  if (leak) {
+    lv_obj_clear_flag(ch->ribbon, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_align(ch->content, LV_ALIGN_TOP_MID, 0, 36 + 28);
+    lv_obj_set_size(ch->content, SCREEN_WIDTH, SCREEN_HEIGHT - 36 - 28 - 28);
+  } else {
+    lv_obj_add_flag(ch->ribbon, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_align(ch->content, LV_ALIGN_TOP_MID, 0, 36);
+    lv_obj_set_size(ch->content, SCREEN_WIDTH, SCREEN_HEIGHT - 36 - 28);
+  }
+}
+
+static void apply_leak_state() {
+  bool leak = oilTankData.leak_detected == "y";
+  apply_leak_to(&s1.chrome, leak);
+  apply_leak_to(&s2.chrome, leak);
+  apply_leak_to(&s3.chrome, leak);
+}
+
 void update_oiltank_ui() {
+  apply_leak_state();
   update_screen1();
   update_screen2();
   update_screen3();

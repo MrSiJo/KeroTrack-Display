@@ -510,6 +510,7 @@ static void create_chrome(lv_obj_t *parent, screen_chrome_t *out, const char *do
   lv_obj_set_style_pad_hor(sb, 8, LV_PART_MAIN);
   lv_obj_set_style_pad_ver(sb, 6, LV_PART_MAIN);
   lv_obj_clear_flag(sb, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_flag(sb, LV_OBJ_FLAG_EVENT_BUBBLE);
 
   out->sb.icon_wifi = lv_label_create(sb);
   lv_label_set_text(out->sb.icon_wifi, LV_SYMBOL_WIFI);
@@ -545,6 +546,7 @@ static void create_chrome(lv_obj_t *parent, screen_chrome_t *out, const char *do
   lv_obj_set_style_border_width(out->ribbon, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_all(out->ribbon, 0, LV_PART_MAIN);
   lv_obj_clear_flag(out->ribbon, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_flag(out->ribbon, LV_OBJ_FLAG_EVENT_BUBBLE);
   lv_obj_add_flag(out->ribbon, LV_OBJ_FLAG_HIDDEN);
 
   out->ribbon_label = lv_label_create(out->ribbon);
@@ -572,6 +574,7 @@ static void create_chrome(lv_obj_t *parent, screen_chrome_t *out, const char *do
   lv_obj_set_style_border_width(out->content, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_all(out->content, 0, LV_PART_MAIN);
   lv_obj_clear_flag(out->content, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_flag(out->content, LV_OBJ_FLAG_EVENT_BUBBLE);
 
   // --- Bottom dots indicator ---
   out->dots = lv_label_create(parent);
@@ -617,12 +620,14 @@ void create_screen1() {
   lv_obj_set_style_bg_color(s1.bar_fill, lv_color_hex(0x4ade80), LV_PART_INDICATOR);
   lv_obj_set_style_radius(s1.bar_fill, 6, LV_PART_MAIN);
   lv_obj_set_style_radius(s1.bar_fill, 6, LV_PART_INDICATOR);
+  lv_obj_add_flag(s1.bar_fill, LV_OBJ_FLAG_EVENT_BUBBLE);
 
   s1.lbl_empty_date = lv_label_create(c);
-  lv_label_set_text(s1.lbl_empty_date, "Empty -- - -- days");
+  lv_label_set_text(s1.lbl_empty_date, "Empty --\n-- days");
   lv_obj_set_style_text_font(s1.lbl_empty_date, &lv_font_montserrat_16, LV_PART_MAIN);
   lv_obj_set_style_text_color(s1.lbl_empty_date, lv_color_hex(0xaaaaaa), LV_PART_MAIN);
-  lv_obj_align(s1.lbl_empty_date, LV_ALIGN_TOP_MID, 0, 195);
+  lv_obj_set_style_text_align(s1.lbl_empty_date, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+  lv_obj_align(s1.lbl_empty_date, LV_ALIGN_TOP_MID, 0, 188);
 }
 
 void create_screen2() {
@@ -665,6 +670,7 @@ void create_screen2() {
   lv_obj_set_style_border_width(s2.bar_split_hw, 0, LV_PART_MAIN);
   lv_obj_set_style_radius(s2.bar_split_hw, 0, LV_PART_MAIN);
   lv_obj_align(s2.bar_split_hw, LV_ALIGN_TOP_LEFT, 20, 155);
+  lv_obj_add_flag(s2.bar_split_hw, LV_OBJ_FLAG_EVENT_BUBBLE);
 
   s2.bar_split_heat = lv_obj_create(c);
   lv_obj_set_size(s2.bar_split_heat, 100, 14);
@@ -672,6 +678,7 @@ void create_screen2() {
   lv_obj_set_style_border_width(s2.bar_split_heat, 0, LV_PART_MAIN);
   lv_obj_set_style_radius(s2.bar_split_heat, 0, LV_PART_MAIN);
   lv_obj_align(s2.bar_split_heat, LV_ALIGN_TOP_LEFT, 120, 155);
+  lv_obj_add_flag(s2.bar_split_heat, LV_OBJ_FLAG_EVENT_BUBBLE);
 
   // Legend
   s2.lbl_hw_legend = lv_label_create(c);
@@ -708,7 +715,7 @@ void create_screen3() {
   lv_obj_t *c = s3.chrome.content;
 
   s3.lbl_avg_monthly = lv_label_create(c);
-  lv_label_set_text(s3.lbl_avg_monthly, "£--");
+  lv_label_set_text(s3.lbl_avg_monthly, "--");
   lv_obj_set_style_text_font(s3.lbl_avg_monthly, &lv_font_montserrat_48, LV_PART_MAIN);
   lv_obj_set_style_text_color(s3.lbl_avg_monthly, lv_color_hex(0xeeeeee), LV_PART_MAIN);
   lv_obj_align(s3.lbl_avg_monthly, LV_ALIGN_TOP_MID, 0, 20);
@@ -721,13 +728,13 @@ void create_screen3() {
   lv_obj_align(sub, LV_ALIGN_TOP_MID, 0, 80);
 
   s3.lbl_avg_weekly = lv_label_create(c);
-  lv_label_set_text(s3.lbl_avg_weekly, "£-- /wk");
+  lv_label_set_text(s3.lbl_avg_weekly, "-- /wk");
   lv_obj_set_style_text_font(s3.lbl_avg_weekly, &lv_font_montserrat_16, LV_PART_MAIN);
   lv_obj_set_style_text_color(s3.lbl_avg_weekly, lv_color_hex(0xaaaaaa), LV_PART_MAIN);
   lv_obj_align(s3.lbl_avg_weekly, LV_ALIGN_TOP_LEFT, 30, 110);
 
   s3.lbl_avg_annual = lv_label_create(c);
-  lv_label_set_text(s3.lbl_avg_annual, "£-- /yr");
+  lv_label_set_text(s3.lbl_avg_annual, "-- /yr");
   lv_obj_set_style_text_font(s3.lbl_avg_annual, &lv_font_montserrat_16, LV_PART_MAIN);
   lv_obj_set_style_text_color(s3.lbl_avg_annual, lv_color_hex(0xaaaaaa), LV_PART_MAIN);
   lv_obj_align(s3.lbl_avg_annual, LV_ALIGN_TOP_RIGHT, -30, 110);
@@ -750,9 +757,10 @@ void create_screen3() {
   lv_obj_set_style_pad_all(s3.cell_to_fill, 4, LV_PART_MAIN);
   lv_obj_clear_flag(s3.cell_to_fill, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(s3.cell_to_fill, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+  lv_obj_add_flag(s3.cell_to_fill, LV_OBJ_FLAG_EVENT_BUBBLE);
 
   s3.lbl_cost_to_fill = lv_label_create(s3.cell_to_fill);
-  lv_label_set_text(s3.lbl_cost_to_fill, "£--");
+  lv_label_set_text(s3.lbl_cost_to_fill, "--");
   lv_obj_set_style_text_font(s3.lbl_cost_to_fill, &lv_font_montserrat_28, LV_PART_MAIN);
   lv_obj_set_style_text_color(s3.lbl_cost_to_fill, lv_color_hex(0xeeeeee), LV_PART_MAIN);
   lv_obj_align(s3.lbl_cost_to_fill, LV_ALIGN_TOP_MID, 0, 0);
@@ -771,18 +779,19 @@ void create_screen3() {
   lv_obj_set_style_border_color(s3.pip, lv_color_hex(0x181c24), LV_PART_MAIN);
   lv_obj_align(s3.pip, LV_ALIGN_TOP_RIGHT, 4, -4);
   lv_obj_add_flag(s3.pip, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_flag(s3.pip, LV_OBJ_FLAG_EVENT_BUBBLE);
 
   s3.lbl_ppl = lv_label_create(c);
   lv_label_set_text(s3.lbl_ppl, "-- p/L");
   lv_obj_set_style_text_font(s3.lbl_ppl, &lv_font_montserrat_28, LV_PART_MAIN);
   lv_obj_set_style_text_color(s3.lbl_ppl, lv_color_hex(0xeeeeee), LV_PART_MAIN);
-  lv_obj_align(s3.lbl_ppl, LV_ALIGN_TOP_RIGHT, -45, 175);
+  lv_obj_align(s3.lbl_ppl, LV_ALIGN_TOP_RIGHT, -15, 175);
 
   lv_obj_t *ppl_label = lv_label_create(c);
   lv_label_set_text(ppl_label, "current ppl");
   lv_obj_set_style_text_font(ppl_label, &lv_font_montserrat_14, LV_PART_MAIN);
   lv_obj_set_style_text_color(ppl_label, lv_color_hex(0x888888), LV_PART_MAIN);
-  lv_obj_align(ppl_label, LV_ALIGN_TOP_RIGHT, -30, 215);
+  lv_obj_align(ppl_label, LV_ALIGN_TOP_RIGHT, -15, 215);
 }
 
 // Format "2026-08-23 14:32:00" -> "23 Aug 2026". Returns false on parse failure.
@@ -824,7 +833,7 @@ static void update_screen1() {
   // Empty date
   char date_buf[16];
   if (format_empty_date(oilTankAnalysis.estimated_empty_date, date_buf, sizeof(date_buf))) {
-    snprintf(buf, sizeof(buf), "Empty %s - %.0f days", date_buf, oilTankAnalysis.estimated_days_remaining);
+    snprintf(buf, sizeof(buf), "Empty %s\n%.0f days", date_buf, oilTankAnalysis.estimated_days_remaining);
   } else {
     snprintf(buf, sizeof(buf), "%.0f days remaining", oilTankAnalysis.estimated_days_remaining);
   }
@@ -877,14 +886,14 @@ static void update_screen2() {
 static void update_screen3() {
   if (!screen3) return;
   char buf[24];
-  snprintf(buf, sizeof(buf), "£%.0f", oilTankCost.avg_monthly_cost);
+  snprintf(buf, sizeof(buf), "%.0f", oilTankCost.avg_monthly_cost);
   lv_label_set_text(s3.lbl_avg_monthly, buf);
-  snprintf(buf, sizeof(buf), "£%.0f /wk", oilTankCost.avg_weekly_cost);
+  snprintf(buf, sizeof(buf), "%.0f /wk", oilTankCost.avg_weekly_cost);
   lv_label_set_text(s3.lbl_avg_weekly, buf);
-  snprintf(buf, sizeof(buf), "£%.0f /yr", oilTankCost.avg_annual_cost);
+  snprintf(buf, sizeof(buf), "%.0f /yr", oilTankCost.avg_annual_cost);
   lv_label_set_text(s3.lbl_avg_annual, buf);
 
-  snprintf(buf, sizeof(buf), "£%.0f", oilTankData.cost_to_fill);
+  snprintf(buf, sizeof(buf), "%.0f", oilTankData.cost_to_fill);
   lv_label_set_text(s3.lbl_cost_to_fill, buf);
 
   snprintf(buf, sizeof(buf), "%.1f p/L", oilTankData.current_ppl);

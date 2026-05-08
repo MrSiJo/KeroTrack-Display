@@ -717,11 +717,11 @@ void create_screen3() {
   s3.lbl_avg_monthly = lv_label_create(c);
   lv_label_set_text(s3.lbl_avg_monthly, "--");
   lv_obj_set_style_text_font(s3.lbl_avg_monthly, &lv_font_montserrat_48, LV_PART_MAIN);
-  lv_obj_set_style_text_color(s3.lbl_avg_monthly, lv_color_hex(0xeeeeee), LV_PART_MAIN);
+  lv_obj_set_style_text_color(s3.lbl_avg_monthly, lv_color_hex(0xfcd34d), LV_PART_MAIN);
   lv_obj_align(s3.lbl_avg_monthly, LV_ALIGN_TOP_MID, 0, 20);
 
   lv_obj_t *sub = lv_label_create(c);
-  lv_label_set_text(sub, "AVG MONTHLY");
+  lv_label_set_text(sub, "AVG MONTHLY (GBP)");
   lv_obj_set_style_text_font(sub, &lv_font_montserrat_14, LV_PART_MAIN);
   lv_obj_set_style_text_color(sub, lv_color_hex(0x888888), LV_PART_MAIN);
   lv_obj_set_style_text_letter_space(sub, 3, LV_PART_MAIN);
@@ -730,13 +730,13 @@ void create_screen3() {
   s3.lbl_avg_weekly = lv_label_create(c);
   lv_label_set_text(s3.lbl_avg_weekly, "-- /wk");
   lv_obj_set_style_text_font(s3.lbl_avg_weekly, &lv_font_montserrat_16, LV_PART_MAIN);
-  lv_obj_set_style_text_color(s3.lbl_avg_weekly, lv_color_hex(0xaaaaaa), LV_PART_MAIN);
+  lv_obj_set_style_text_color(s3.lbl_avg_weekly, lv_color_hex(0xfcd34d), LV_PART_MAIN);
   lv_obj_align(s3.lbl_avg_weekly, LV_ALIGN_TOP_LEFT, 30, 110);
 
   s3.lbl_avg_annual = lv_label_create(c);
   lv_label_set_text(s3.lbl_avg_annual, "-- /yr");
   lv_obj_set_style_text_font(s3.lbl_avg_annual, &lv_font_montserrat_16, LV_PART_MAIN);
-  lv_obj_set_style_text_color(s3.lbl_avg_annual, lv_color_hex(0xaaaaaa), LV_PART_MAIN);
+  lv_obj_set_style_text_color(s3.lbl_avg_annual, lv_color_hex(0xfcd34d), LV_PART_MAIN);
   lv_obj_align(s3.lbl_avg_annual, LV_ALIGN_TOP_RIGHT, -30, 110);
 
   // Divider
@@ -762,7 +762,7 @@ void create_screen3() {
   s3.lbl_cost_to_fill = lv_label_create(s3.cell_to_fill);
   lv_label_set_text(s3.lbl_cost_to_fill, "--");
   lv_obj_set_style_text_font(s3.lbl_cost_to_fill, &lv_font_montserrat_28, LV_PART_MAIN);
-  lv_obj_set_style_text_color(s3.lbl_cost_to_fill, lv_color_hex(0xeeeeee), LV_PART_MAIN);
+  lv_obj_set_style_text_color(s3.lbl_cost_to_fill, lv_color_hex(0xfcd34d), LV_PART_MAIN);
   lv_obj_align(s3.lbl_cost_to_fill, LV_ALIGN_TOP_MID, 0, 0);
 
   s3.lbl_to_fill_label = lv_label_create(s3.cell_to_fill);
@@ -912,7 +912,7 @@ static void update_screen3() {
   } else {
     lv_obj_set_style_bg_opa(s3.cell_to_fill, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_color(s3.cell_to_fill, lv_color_hex(0x444b58), LV_PART_MAIN);
-    lv_obj_set_style_text_color(s3.lbl_cost_to_fill, lv_color_hex(0xeeeeee), LV_PART_MAIN);
+    lv_obj_set_style_text_color(s3.lbl_cost_to_fill, lv_color_hex(0xfcd34d), LV_PART_MAIN);
     lv_obj_set_style_text_color(s3.lbl_to_fill_label, lv_color_hex(0x888888), LV_PART_MAIN);
     lv_label_set_text(s3.lbl_to_fill_label, "to fill");
     lv_obj_add_flag(s3.pip, LV_OBJ_FLAG_HIDDEN);

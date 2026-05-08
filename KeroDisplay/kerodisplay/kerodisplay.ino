@@ -483,7 +483,42 @@ void create_screen1() {
   if (screen1) lv_obj_clean(screen1);
   else screen1 = lv_obj_create(NULL);
   create_chrome(screen1, &s1.chrome, "*..");
-  // Content widgets added in Task 7.
+
+  lv_obj_t *c = s1.chrome.content;
+
+  s1.lbl_pct = lv_label_create(c);
+  lv_label_set_text(s1.lbl_pct, "--%");
+  lv_obj_set_style_text_font(s1.lbl_pct, &lv_font_montserrat_48, LV_PART_MAIN);
+  lv_obj_set_style_text_color(s1.lbl_pct, lv_color_hex(0x4ade80), LV_PART_MAIN);
+  lv_obj_align(s1.lbl_pct, LV_ALIGN_TOP_MID, 0, 30);
+
+  lv_obj_t *sub = lv_label_create(c);
+  lv_label_set_text(sub, "OIL LEVEL");
+  lv_obj_set_style_text_font(sub, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(sub, lv_color_hex(0x888888), LV_PART_MAIN);
+  lv_obj_set_style_text_letter_space(sub, 3, LV_PART_MAIN);
+  lv_obj_align(sub, LV_ALIGN_TOP_MID, 0, 90);
+
+  s1.lbl_litres = lv_label_create(c);
+  lv_label_set_text(s1.lbl_litres, "-- L");
+  lv_obj_set_style_text_font(s1.lbl_litres, &lv_font_montserrat_28, LV_PART_MAIN);
+  lv_obj_set_style_text_color(s1.lbl_litres, lv_color_hex(0xeeeeee), LV_PART_MAIN);
+  lv_obj_align(s1.lbl_litres, LV_ALIGN_TOP_MID, 0, 115);
+
+  s1.bar_fill = lv_bar_create(c);
+  lv_obj_set_size(s1.bar_fill, SCREEN_WIDTH - 40, 12);
+  lv_obj_align(s1.bar_fill, LV_ALIGN_TOP_MID, 0, 165);
+  lv_bar_set_range(s1.bar_fill, 0, 100);
+  lv_bar_set_value(s1.bar_fill, 0, LV_ANIM_OFF);
+  lv_obj_set_style_bg_color(s1.bar_fill, lv_color_hex(0x2a2f3a), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(s1.bar_fill, lv_color_hex(0x4ade80), LV_PART_INDICATOR);
+  lv_obj_set_style_radius(s1.bar_fill, 6, LV_PART_MAIN | LV_PART_INDICATOR);
+
+  s1.lbl_empty_date = lv_label_create(c);
+  lv_label_set_text(s1.lbl_empty_date, "Empty -- - -- days");
+  lv_obj_set_style_text_font(s1.lbl_empty_date, &lv_font_montserrat_16, LV_PART_MAIN);
+  lv_obj_set_style_text_color(s1.lbl_empty_date, lv_color_hex(0xaaaaaa), LV_PART_MAIN);
+  lv_obj_align(s1.lbl_empty_date, LV_ALIGN_TOP_MID, 0, 195);
 }
 
 void create_screen2() {
@@ -500,9 +535,54 @@ void create_screen3() {
   // Content widgets added in Task 9.
 }
 
+// Format "2026-08-23 14:32:00" -> "23 Aug 2026". Returns false on parse failure.
+static bool format_empty_date(const String &iso, char *out, size_t cap) {
+  if (iso.length() < 10) return false;
+  static const char *MONTHS[] = {"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
+  int year = iso.substring(0, 4).toInt();
+  int mon  = iso.substring(5, 7).toInt();
+  int day  = iso.substring(8, 10).toInt();
+  if (mon < 1 || mon > 12 || year < 2020 || day < 1 || day > 31) return false;
+  snprintf(out, cap, "%d %s %d", day, MONTHS[mon-1], year);
+  return true;
+}
+
+static uint32_t pct_color(float pct) {
+  if (pct >= 50.0f) return 0x4ade80; // green
+  if (pct >= 25.0f) return 0xffb74d; // amber
+  return 0xff5555;                   // red
+}
+
+static void update_screen1() {
+  if (!screen1) return;
+  char buf[40];
+  // Hero %
+  snprintf(buf, sizeof(buf), "%.0f%%", oilTankData.percentage_remaining);
+  lv_label_set_text(s1.lbl_pct, buf);
+  uint32_t col = pct_color(oilTankData.percentage_remaining);
+  lv_obj_set_style_text_color(s1.lbl_pct, lv_color_hex(col), LV_PART_MAIN);
+  // Litres (with thousands separator)
+  long litres = (long)(oilTankData.litres_remaining + 0.5f);
+  if (litres >= 1000) snprintf(buf, sizeof(buf), "%ld,%03ld L", litres/1000, litres%1000);
+  else                snprintf(buf, sizeof(buf), "%ld L", litres);
+  lv_label_set_text(s1.lbl_litres, buf);
+  // Bar
+  int v = (int)oilTankData.percentage_remaining;
+  if (v < 0) v = 0; if (v > 100) v = 100;
+  lv_bar_set_value(s1.bar_fill, v, LV_ANIM_OFF);
+  lv_obj_set_style_bg_color(s1.bar_fill, lv_color_hex(col), LV_PART_INDICATOR);
+  // Empty date
+  char date_buf[16];
+  if (format_empty_date(oilTankAnalysis.estimated_empty_date, date_buf, sizeof(date_buf))) {
+    snprintf(buf, sizeof(buf), "Empty %s - %.0f days", date_buf, oilTankAnalysis.estimated_days_remaining);
+  } else {
+    snprintf(buf, sizeof(buf), "%.0f days remaining", oilTankAnalysis.estimated_days_remaining);
+  }
+  lv_label_set_text(s1.lbl_empty_date, buf);
+}
+
 void update_oiltank_ui() {
-  // Per-screen update functions are added in Tasks 7/8/9.
-  // Status bar and ribbon update from a separate timer in Task 6.
+  update_screen1();
 }
 
 static void format_age(char *out, size_t cap, unsigned long age_ms) {

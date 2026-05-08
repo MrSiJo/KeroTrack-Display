@@ -1,89 +1,208 @@
-# KeroTrack Display (formerly Aura)
+# KeroTrack Display
 
-This project is a fork of the original [Aura](https://github.com/Surrey-Homeware/Aura) which was made [Aura weather display](https://makerworld.com/en/models/1382304-aura-smart-weather-forecast-display), repurposed to act as a real-time oil tank monitor for the [KeroTrack](https://github.com/your-org/KeroTrack) system. Instead of showing weather data, this display now retrieves and visualizes oil tank data published to an MQTT broker by KeroTrack sensors and backend services.
+A four-screen oil-tank dashboard for the ESP32-2432S028R "CYD" (Cheap Yellow
+Display, 2.8" 240×320 ILI9341 with resistive touch). Subscribes to a
+[KeroTrack v2](https://github.com/MrSiJo/KeroTrack) MQTT broker and surfaces
+tank level, consumption, cost, and current weather in a touch-cycling UI.
 
-## Project Overview
+Originally forked from [Aura](https://github.com/Surrey-Homeware/Aura) — the
+weather screen reuses Aura's icon set and Latin Montserrat font files (see
+`KeroDisplay/kerodisplay/WEATHER_ASSETS.md` for attribution).
 
-KeroTrack Display runs on ESP32-2432S028R ILI9341-based devices ("CYD" or Cheap Yellow Display, 2.8" screen). It connects to WiFi, subscribes to MQTT topics, and shows:
-- Oil level (litres, % full, bars)
-- Temperature
-- Days remaining (estimation)
-- Cost to fill, litres to order, and other tank stats
+## Screens
 
-The UI is built with [lvgl](https://lvgl.io/) and [TFT_eSPI](https://github.com/Bodmer/TFT_eSPI), and is optimized for touch and low-power operation.
+The display cycles through four screens with an asymmetric auto-rotate
+(60s on screen 1, 30s on the others). Tap anywhere to advance and reset the
+hold timer for the new screen.
 
-It was coded using Cursor and I have no prior experience using C or compiling/deploying to CYD/ESP32 devices.
+| # | Screen | Hero | Supporting data |
+|---|--------|------|-----------------|
+| 1 | At-a-glance | `73%` (colour-coded green/amber/red) | litres remaining, level bar, "Empty 23 Aug 2026 / 47 days" |
+| 2 | Consumption | `285 L` used since refill | days since refill, hot-water vs heating split bar with daily L breakdown, avg L/day burn, "↑ refill detected today" flag |
+| 3 | Cost | `243` avg monthly (gold tint, `(GBP)` cue) | weekly + annual cost, cost-to-fill cell with 500L order-ready threshold (green tint + pip when ≥ 500L), current p/L |
+| 4 | Weather | `12°` current temperature with condition icon | feels-like, condition descriptor, location, 3-day forecast strip with icons + day + high/low |
 
-## How to Compile & Flash
+Bottom dot indicator (`*...`, `.*..`, `..*.`, `...*`) shows which screen is
+active. Order: 1 → 2 → 3 → 4 → 1.
 
-1. **Configure Arduino IDE:**
-    - Board: "ESP32 Dev Module"
-    - Tools → Partition Scheme: "Huge App (3MB No OTA/1MB SPIFFS)"
-2. **Install Required Libraries:**
-    - ArduinoJson 7.4.1
-    - HttpClient 2.2.0
-    - TFT_eSPI 2.5.43_
-    - WifiManager 2.0.17
-    - XPT2046_Touchscreen 1.4
-    - lvgl 9.2.2
-    - PubSubClient (for MQTT)
-3. **Source Code Placement:**
-    - Place the source code folders in `~/Documents/Arduino/`.
-    - Copy the included config files for `lvgl`, `TFT_eSPI` and `PubSubClient` into their respective library folders (see `lvgl/src/lv_conf.h`, `TFT_eSPI/User_Setup.h` and `PubSubClient/src/PubSubClient.h`).
-4. **Build and Upload:**
-    - Open `KeroDisplay/kerodisplay.ino` in Arduino IDE and upload to your ESP32 device.
+## Status bar (every screen)
 
-## Configuration
+A 36px status bar sits across the top of every screen:
 
-- On first boot, the device will start and you'll need to connect to a wifi network called `KeroTrack` and open a browser to http://192.168.4.1.  From there you can configure your wifi network to connect to and your MQTT broker settings.
-- After configuration, it will connect to the specified MQTT broker and subscribe to KeroTrack topics (e.g., `oiltank/level`, `oiltank/analysis`).
+- WiFi icon (dims when disconnected)
+- MQTT state dot (green = connected, amber = reconnecting, red = down)
+- NTP clock `HH:MM` in centre (blank until first sync; auto-applies UK BST/GMT)
+- Last-update age on the right (`2m ago`, `42m ago`, `3h ago`)
+  - Default light blue, turns amber after 10 min stale, red after 60 min
 
-## Features
+## Alerts
 
-- **Real-time Oil Tank Monitoring:**
-  - Displays live oil tank data from MQTT topics published by KeroTrack, including litres remaining, percentage full, temperature, litres to order, cost to fill, and more.
-  - Visual bar indicator with color gradient (green/yellow/red) to show oil level and highlight low levels.
+- **Leak detected:** when MQTT publishes `leak_detected: "y"`, a red ribbon
+  with a soft pulsing background appears below the status bar on every
+  screen. Content shifts down 28px while active.
+- **Refill detected:** subtle `↑ refill detected today` line on the
+  consumption screen when `refill_detected: "y"`.
 
-- **Touchscreen User Interface:**
-  - Two main screens:
-    - **Tank Status:** Litres remaining, percentage full, temperature, days left, and oil level bar.
-    - **Order/Cost Info:** Litres to order, price per litre (PPL), and estimated cost to fill.
-  - Tap anywhere to switch between screens (with debounce).
-  - Auto-switches between screens every 2 minutes.
+## Hardware
 
-- **Backlight Scheduling & Power Management:**
-  - Automatically dims the display between 23:00 and 06:00 (based on NTP time).
-  - Touching the screen during dim hours temporarily wakes the backlight.
-  - Always-on fallback if NTP time is not available.
+- **Board:** ESP32-2432S028R "CYD" (240×320 portrait ILI9341, XPT2046 touch)
+- **Partition scheme:** Huge App (3MB No OTA/1MB SPIFFS) — required, the
+  sketch with all weather assets does not fit on the default partition
 
-- **WiFi & MQTT Setup via Captive Portal:**
-  - On first boot (or if WiFi is not configured), launches a WiFiManager captive portal for easy WiFi and MQTT configuration.
-  - MQTT credentials and broker address are stored in device preferences.
+## Building and flashing
 
-- **Robust MQTT Integration:**
-  - Subscribes to both oil tank level and analysis topics.
-  - Supports wildcard topic subscription for debugging.
-  - Updates the UI instantly when new MQTT data arrives.
+This is an Arduino IDE project. There is no CLI build system; `.ino`
+compilation goes through the IDE.
 
-- **Persistent Preferences:**
-  - Remembers WiFi, MQTT, and brightness settings across reboots.
+1. **Arduino IDE setup:**
+   - Board: "ESP32 Dev Module"
+   - Tools → Partition Scheme: **"Huge App (3MB No OTA/1MB SPIFFS)"**
+   - Tools → Port: your CYD's COM port
 
-- **Visual Alerts & Robustness:**
-  - Color-coded bar indicator for oil level.
-  - Handles WiFi and MQTT connection failures gracefully.
-  - Displays setup and status screens for user feedback.
+2. **Required libraries** (Arduino Library Manager):
+   - ArduinoJson 7.4.1
+   - HttpClient 2.2.0
+   - TFT_eSPI 2.5.43
+   - WiFiManager 2.0.17
+   - XPT2046_Touchscreen 1.4
+   - lvgl 9.2.2
+   - PubSubClient
 
-## Credits & Thanks
+3. **Library config override (important):**
+   The `lvgl/`, `TFT_eSPI/`, and `PubSubClient/` folders at the repo root are
+   **patched header files**, not vendored library copies. After installing
+   the libraries through Library Manager, copy these into the user's
+   installed Arduino libraries:
 
-- Forked from [Aura](https://github.com/Surrey-Homeware/Aura)
-- Uses the 3d printed case for the CYD on [Makerworld](https://makerworld.com/en/models/1382304-aura-smart-weather-forecast-display)
-- [lvgl](https://lvgl.io/) for UI
-- [TFT_eSPI](https://github.com/Bodmer/TFT_eSPI) for display driver
-- [WifiManager](https://github.com/tzapu/WiFiManager) for easy setup
-- [XPT2046_Touchscreen](https://github.com/PaulStoffregen/XPT2046_Touchscreen)
-- [PubSubClient](https://github.com/knolleary/pubsubclient) for MQTT
-- [KeroTrack](https://github.com/MrSiJo/KeroTrack) for backend and data
+   ```powershell
+   Copy-Item lvgl\src\lv_conf.h "$HOME\Documents\Arduino\libraries\lvgl\src\lv_conf.h" -Force
+   Copy-Item TFT_eSPI\User_Setup.h "$HOME\Documents\Arduino\libraries\TFT_eSPI\User_Setup.h" -Force
+   Copy-Item PubSubClient\src\PubSubClient.h "$HOME\Documents\Arduino\libraries\PubSubClient\src\PubSubClient.h" -Force
+   ```
+
+   The CYD-specific TFT pin mapping and the LVGL feature configuration
+   (image widget, fonts, etc.) live in those headers. Edits to them only
+   take effect on the device after the file is copied into the Arduino
+   libraries folder.
+
+4. **Open and upload:**
+   `KeroDisplay/kerodisplay/kerodisplay.ino` → Sketch → Upload.
+
+   Watch the boot log on Serial Monitor at 115200 baud.
+
+## First-time setup (captive portal)
+
+On first boot (or if the saved WiFi credentials are wrong), the device
+launches a WiFiManager captive portal:
+
+1. Connect from a phone to the open WiFi network **`KeroTrack`**.
+2. Browser opens to `http://192.168.4.1` (or scan for a captive-portal
+   notification).
+3. Pick your home WiFi and enter MQTT broker / port / user / password.
+4. Save. The device prompts you to power-cycle, then boots into normal
+   mode.
+
+## Settings web page (after first setup)
+
+Once on WiFi, the device runs an always-on settings server. Visit
+`http://<device-ip>/` from any browser on the LAN — the IP is printed on
+serial at boot, e.g.:
+
+```
+Settings page: http://172.16.0.130
+```
+
+The settings page has two sections:
+
+- **MQTT** — change broker, port, username, password. Submitting reboots.
+- **Weather** — type a place name (city/town/postcode) and click "Search
+  and change". The device hits the
+  [Open-Meteo geocoding API](https://open-meteo.com/en/docs/geocoding-api)
+  and presents the matches as radio buttons. Pick one, click "Save and
+  reboot". The chosen name + lat/lon are persisted to NVS.
+  - Leave the field blank and search to disable the weather screen
+    (screen 4 will show "Weather not configured").
+
+## MQTT topics consumed
+
+Subscribed by the device. All published by the
+[KeroTrack v2](https://github.com/MrSiJo/KeroTrack) backend.
+
+| Topic | Used for |
+|-------|----------|
+| `oiltank/level` | percentage, litres, leak/refill flags, cost-to-fill, ppl, litres-to-order, current temperature |
+| `oiltank/analysis` | empty date, days remaining, days since refill, total used since refill, avg daily consumption, hot-water vs heating breakdown |
+| `oiltank/cost_analysis` | avg daily/weekly/monthly/annual cost, latest refill amount/cost/ppl |
+
+A non-blocking reconnect helper runs in `loop()` with exponential backoff
+(1s → 2s → 5s → 15s → 30s → 60s, capped) so transient broker outages don't
+freeze the UI.
+
+## Weather (screen 4)
+
+Powered by [Open-Meteo](https://open-meteo.com) — no API key needed.
+A FreeRTOS task wakes every 15 minutes, fetches current + 3-day forecast,
+and uses `lv_async_call` to refresh the UI on the LVGL thread.
+
+Saved location format: `Surrey, GB` (city + ISO country code, kept short
+to fit the screen). Long names are dot-truncated. The 26-icon set covers
+all WMO weather codes; icons swap between day/night variants based on the
+API's `is_day` flag.
+
+## Project layout
+
+```
+KeroTrack-Display/
+├── KeroDisplay/
+│   └── kerodisplay/
+│       ├── kerodisplay.ino           # entire firmware (single-file sketch)
+│       ├── icon_*.c                  # 26 weather icons (LVGL bitmap arrays)
+│       ├── lv_font_montserrat_latin_*.c  # Latin-1 font variants (5 sizes)
+│       └── WEATHER_ASSETS.md         # attribution for icons/fonts
+├── lvgl/
+│   └── src/lv_conf.h                 # patched LVGL config (fonts, image widget)
+├── TFT_eSPI/
+│   └── User_Setup.h                  # patched TFT pin mapping for CYD
+├── PubSubClient/
+│   └── src/PubSubClient.h            # patched MQTT buffer size
+├── docs/
+│   └── superpowers/                  # design specs and implementation plans
+└── README.md / CLAUDE.md
+```
+
+## Architecture notes
+
+- The sketch is structured around three event sources sharing global
+  state: an LVGL UI loop, an MQTT callback, and a FreeRTOS weather task.
+- Screen widgets are pre-built once during `setup()` with cached pointers
+  in per-screen structs (`s1`, `s2`, `s3`, `s4`) — no fragile child-index
+  lookups in update paths.
+- Reusable `create_chrome()` helper builds the status bar + hidden leak
+  ribbon + content container + dot indicator on every screen.
+- `update_oiltank_ui()` runs on every received MQTT message and dispatches
+  to per-screen update functions; the weather task feeds `update_screen4()`
+  separately via `lv_async_call`.
+
+## Credits
+
+- [Aura](https://github.com/Surrey-Homeware/Aura) — original parent project,
+  source of the weather icons and Latin Montserrat fonts. Aura's
+  3D-printed case from
+  [MakerWorld](https://makerworld.com/en/models/1382304-aura-smart-weather-forecast-display)
+  fits this project unchanged.
+- [Google Weather Icons](https://github.com/mrdarrengriffin/google-weather-icons)
+  — origin of the icon artwork (used with attribution).
+- [Open-Meteo](https://open-meteo.com) — weather + geocoding APIs.
+- [LVGL](https://lvgl.io/), [TFT_eSPI](https://github.com/Bodmer/TFT_eSPI),
+  [WiFiManager](https://github.com/tzapu/WiFiManager),
+  [PubSubClient](https://github.com/knolleary/pubsubclient),
+  [ArduinoJson](https://arduinojson.org/),
+  [XPT2046_Touchscreen](https://github.com/PaulStoffregen/XPT2046_Touchscreen).
+- [KeroTrack](https://github.com/MrSiJo/KeroTrack) — the backend that
+  feeds this display.
 
 ## License
 
-The code is available under the GPL 3.0 license. See original Aura repo for icon and asset licenses.
+GPL-3.0 (inherited from Aura, the parent project). Note that the weather
+icons in `KeroDisplay/kerodisplay/icon_*.c` originate from Google and are
+not GPL-licensed — see `WEATHER_ASSETS.md` for details.

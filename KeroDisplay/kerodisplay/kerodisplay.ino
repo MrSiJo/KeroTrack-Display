@@ -526,7 +526,75 @@ void create_screen2() {
   if (screen2) lv_obj_clean(screen2);
   else screen2 = lv_obj_create(NULL);
   create_chrome(screen2, &s2.chrome, ".*.");
-  // Content widgets added in Task 8.
+
+  lv_obj_t *c = s2.chrome.content;
+
+  s2.lbl_used = lv_label_create(c);
+  lv_label_set_text(s2.lbl_used, "-- L");
+  lv_obj_set_style_text_font(s2.lbl_used, &lv_font_montserrat_48, LV_PART_MAIN);
+  lv_obj_set_style_text_color(s2.lbl_used, lv_color_hex(0xeeeeee), LV_PART_MAIN);
+  lv_obj_align(s2.lbl_used, LV_ALIGN_TOP_MID, 0, 20);
+
+  lv_obj_t *sub = lv_label_create(c);
+  lv_label_set_text(sub, "USED SINCE REFILL");
+  lv_obj_set_style_text_font(sub, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(sub, lv_color_hex(0x888888), LV_PART_MAIN);
+  lv_obj_set_style_text_letter_space(sub, 3, LV_PART_MAIN);
+  lv_obj_align(sub, LV_ALIGN_TOP_MID, 0, 80);
+
+  s2.lbl_over_days = lv_label_create(c);
+  lv_label_set_text(s2.lbl_over_days, "over -- days");
+  lv_obj_set_style_text_font(s2.lbl_over_days, &lv_font_montserrat_16, LV_PART_MAIN);
+  lv_obj_set_style_text_color(s2.lbl_over_days, lv_color_hex(0xaaaaaa), LV_PART_MAIN);
+  lv_obj_align(s2.lbl_over_days, LV_ALIGN_TOP_MID, 0, 105);
+
+  // Divider
+  lv_obj_t *div = lv_obj_create(c);
+  lv_obj_set_size(div, 80, 1);
+  lv_obj_set_style_bg_color(div, lv_color_hex(0x444b58), LV_PART_MAIN);
+  lv_obj_set_style_border_width(div, 0, LV_PART_MAIN);
+  lv_obj_align(div, LV_ALIGN_TOP_MID, 0, 135);
+
+  // Split bar — two adjacent rectangles, total width = SCREEN_WIDTH - 40 = 200px
+  s2.bar_split_hw = lv_obj_create(c);
+  lv_obj_set_size(s2.bar_split_hw, 100, 14);
+  lv_obj_set_style_bg_color(s2.bar_split_hw, lv_color_hex(0x4a90e2), LV_PART_MAIN);
+  lv_obj_set_style_border_width(s2.bar_split_hw, 0, LV_PART_MAIN);
+  lv_obj_set_style_radius(s2.bar_split_hw, 0, LV_PART_MAIN);
+  lv_obj_align(s2.bar_split_hw, LV_ALIGN_TOP_LEFT, 20, 155);
+
+  s2.bar_split_heat = lv_obj_create(c);
+  lv_obj_set_size(s2.bar_split_heat, 100, 14);
+  lv_obj_set_style_bg_color(s2.bar_split_heat, lv_color_hex(0xe28b3a), LV_PART_MAIN);
+  lv_obj_set_style_border_width(s2.bar_split_heat, 0, LV_PART_MAIN);
+  lv_obj_set_style_radius(s2.bar_split_heat, 0, LV_PART_MAIN);
+  lv_obj_align(s2.bar_split_heat, LV_ALIGN_TOP_LEFT, 120, 155);
+
+  // Legend
+  s2.lbl_hw_legend = lv_label_create(c);
+  lv_label_set_text(s2.lbl_hw_legend, "* -- L hot water");
+  lv_obj_set_style_text_font(s2.lbl_hw_legend, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(s2.lbl_hw_legend, lv_color_hex(0x4a90e2), LV_PART_MAIN);
+  lv_obj_align(s2.lbl_hw_legend, LV_ALIGN_TOP_LEFT, 20, 175);
+
+  s2.lbl_heat_legend = lv_label_create(c);
+  lv_label_set_text(s2.lbl_heat_legend, "* -- L heating");
+  lv_obj_set_style_text_font(s2.lbl_heat_legend, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(s2.lbl_heat_legend, lv_color_hex(0xe28b3a), LV_PART_MAIN);
+  lv_obj_align(s2.lbl_heat_legend, LV_ALIGN_TOP_LEFT, 20, 192);
+
+  s2.lbl_avg_burn = lv_label_create(c);
+  lv_label_set_text(s2.lbl_avg_burn, "-- L/day avg burn");
+  lv_obj_set_style_text_font(s2.lbl_avg_burn, &lv_font_montserrat_16, LV_PART_MAIN);
+  lv_obj_set_style_text_color(s2.lbl_avg_burn, lv_color_hex(0xaaaaaa), LV_PART_MAIN);
+  lv_obj_align(s2.lbl_avg_burn, LV_ALIGN_TOP_MID, 0, 218);
+
+  s2.lbl_refill_note = lv_label_create(c);
+  lv_label_set_text(s2.lbl_refill_note, LV_SYMBOL_UP " refill detected today");
+  lv_obj_set_style_text_font(s2.lbl_refill_note, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(s2.lbl_refill_note, lv_color_hex(0x4ade80), LV_PART_MAIN);
+  lv_obj_align(s2.lbl_refill_note, LV_ALIGN_TOP_MID, 0, 240);
+  lv_obj_add_flag(s2.lbl_refill_note, LV_OBJ_FLAG_HIDDEN);
 }
 
 void create_screen3() {
@@ -582,8 +650,52 @@ static void update_screen1() {
   lv_label_set_text(s1.lbl_empty_date, buf);
 }
 
+static void update_screen2() {
+  if (!screen2) return;
+  char buf[40];
+  long used = (long)(oilTankAnalysis.total_consumption_since_refill + 0.5f);
+  if (used >= 1000) snprintf(buf, sizeof(buf), "%ld,%03ld L", used/1000, used%1000);
+  else              snprintf(buf, sizeof(buf), "%ld L", used);
+  lv_label_set_text(s2.lbl_used, buf);
+
+  snprintf(buf, sizeof(buf), "over %d days", oilTankAnalysis.days_since_refill);
+  lv_label_set_text(s2.lbl_over_days, buf);
+
+  // Split bar — proportional widths sum to (SCREEN_WIDTH - 40) px = 200px.
+  float hw   = oilTankAnalysis.estimated_daily_hot_water_consumption_l;
+  float heat = oilTankAnalysis.estimated_daily_heating_consumption_l;
+  float total = hw + heat;
+  const int total_px = SCREEN_WIDTH - 40;
+  if (total <= 0.01f) {
+    // Both effectively zero — show a single muted bar
+    lv_obj_set_size(s2.bar_split_hw, total_px, 14);
+    lv_obj_set_style_bg_color(s2.bar_split_hw, lv_color_hex(0x444b58), LV_PART_MAIN);
+    lv_obj_set_size(s2.bar_split_heat, 0, 14);
+  } else {
+    int hw_px   = (int)(total_px * (hw / total) + 0.5f);
+    int heat_px = total_px - hw_px;
+    lv_obj_set_size(s2.bar_split_hw, hw_px, 14);
+    lv_obj_set_style_bg_color(s2.bar_split_hw, lv_color_hex(0x4a90e2), LV_PART_MAIN);
+    lv_obj_set_size(s2.bar_split_heat, heat_px, 14);
+    lv_obj_align(s2.bar_split_heat, LV_ALIGN_TOP_LEFT, 20 + hw_px, 155);
+  }
+
+  snprintf(buf, sizeof(buf), "* %.1f L hot water", hw);
+  lv_label_set_text(s2.lbl_hw_legend, buf);
+  snprintf(buf, sizeof(buf), "* %.1f L heating", heat);
+  lv_label_set_text(s2.lbl_heat_legend, buf);
+
+  snprintf(buf, sizeof(buf), "%.1f L/day avg burn", oilTankAnalysis.avg_daily_consumption_l);
+  lv_label_set_text(s2.lbl_avg_burn, buf);
+
+  bool refill = oilTankData.refill_detected == "y";
+  if (refill) lv_obj_clear_flag(s2.lbl_refill_note, LV_OBJ_FLAG_HIDDEN);
+  else        lv_obj_add_flag(s2.lbl_refill_note,   LV_OBJ_FLAG_HIDDEN);
+}
+
 void update_oiltank_ui() {
   update_screen1();
+  update_screen2();
 }
 
 static void format_age(char *out, size_t cap, unsigned long age_ms) {

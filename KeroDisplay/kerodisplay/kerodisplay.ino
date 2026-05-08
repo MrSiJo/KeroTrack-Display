@@ -337,6 +337,7 @@ void setup() {
   }, LV_EVENT_CLICKED, NULL);
   // Set up auto-switch timer (2 minutes)
   auto_switch_timer = lv_timer_create(auto_switch_cb, 120000, NULL);
+  lv_timer_create(update_status_bars_cb, 1000, NULL);
 
   // NTP time sync
   configTime(0, 0, "0.uk.pool.ntp.org", "1.uk.pool.ntp.org");
@@ -502,6 +503,60 @@ void create_screen3() {
 void update_oiltank_ui() {
   // Per-screen update functions are added in Tasks 7/8/9.
   // Status bar and ribbon update from a separate timer in Task 6.
+}
+
+static void format_age(char *out, size_t cap, unsigned long age_ms) {
+  if (last_mqtt_msg_ms == 0) { snprintf(out, cap, "--"); return; }
+  unsigned long s = age_ms / 1000;
+  if (s < 60)        snprintf(out, cap, "%lus ago", s);
+  else if (s < 3600) snprintf(out, cap, "%lum ago", s / 60);
+  else               snprintf(out, cap, "%luh ago", s / 3600);
+}
+
+static lv_color_t age_color(unsigned long age_ms) {
+  if (last_mqtt_msg_ms == 0)         return lv_color_hex(0x88a0c0);
+  if (age_ms > 60UL * 60UL * 1000UL) return lv_color_hex(0xff5555); // > 60 min: red
+  if (age_ms > 10UL * 60UL * 1000UL) return lv_color_hex(0xffb74d); // > 10 min: amber
+  return lv_color_hex(0x88a0c0);
+}
+
+static lv_color_t mqtt_dot_color() {
+  switch (mqtt_state) {
+    case MQTT_UP:           return lv_color_hex(0x4ade80); // green
+    case MQTT_RECONNECTING: return lv_color_hex(0xffb74d); // amber
+    default:                return lv_color_hex(0xff5555); // red
+  }
+}
+
+static void update_one_status_bar(status_bar_widgets_t *sb) {
+  // Clock
+  time_t now = time(nullptr);
+  if (now > 8 * 3600 * 2) {
+    struct tm t;
+    localtime_r(&now, &t);
+    char clock_buf[8]; snprintf(clock_buf, sizeof(clock_buf), "%02d:%02d", t.tm_hour, t.tm_min);
+    lv_label_set_text(sb->lbl_clock, clock_buf);
+  } else {
+    lv_label_set_text(sb->lbl_clock, "");
+  }
+  // MQTT dot
+  lv_obj_set_style_bg_color(sb->dot_mqtt, mqtt_dot_color(), LV_PART_MAIN);
+  // WiFi icon dim if WiFi down
+  bool wifi_ok = (WiFi.status() == WL_CONNECTED);
+  lv_obj_set_style_text_color(sb->icon_wifi,
+    lv_color_hex(wifi_ok ? 0x88a0c0 : 0x554455), LV_PART_MAIN);
+  // Age
+  char age_buf[16];
+  unsigned long age = millis() - last_mqtt_msg_ms;
+  format_age(age_buf, sizeof(age_buf), age);
+  lv_label_set_text(sb->lbl_age, age_buf);
+  lv_obj_set_style_text_color(sb->lbl_age, age_color(age), LV_PART_MAIN);
+}
+
+static void update_status_bars_cb(lv_timer_t *t) {
+  update_one_status_bar(&s1.chrome.sb);
+  update_one_status_bar(&s2.chrome.sb);
+  update_one_status_bar(&s3.chrome.sb);
 }
 
 static void parse_level(JsonDocument &doc) {

@@ -20,6 +20,10 @@
 #define SCREEN_HEIGHT 320
 #define DRAW_BUF_SIZE (SCREEN_WIDTH * SCREEN_HEIGHT / 10 * (LV_COLOR_DEPTH / 8))
 #define DEFAULT_CAPTIVE_SSID "KeroTrack"
+static const uint32_t SCREEN1_HOLD_MS = 60000;
+static const uint32_t SCREEN2_HOLD_MS = 30000;
+static const uint32_t SCREEN3_HOLD_MS = 30000;
+#define MIN_ORDER_LITRES 500
 
 SPIClass touchscreenSPI = SPIClass(VSPI);
 XPT2046_Touchscreen touchscreen(XPT2046_CS, XPT2046_IRQ);
@@ -96,6 +100,12 @@ const unsigned long screen_switch_debounce = 400; // ms
 // Analysis data structure
 struct OilTankAnalysis {
     float estimated_days_remaining = 0;
+    String estimated_empty_date;                   // "YYYY-MM-DD HH:MM:SS"
+    float total_consumption_since_refill = 0;
+    int   days_since_refill = 0;
+    float avg_daily_consumption_l = 0;
+    float estimated_daily_hot_water_consumption_l = 0;
+    float estimated_daily_heating_consumption_l = 0;
 };
 OilTankAnalysis oilTankAnalysis;
 
@@ -554,7 +564,18 @@ static void parse_level(JsonDocument &doc) {
 static void parse_analysis(JsonDocument &doc) {
   if (!doc["estimated_days_remaining"].isNull())
     oilTankAnalysis.estimated_days_remaining = doc["estimated_days_remaining"].as<float>();
-  // Additional analysis fields are populated in Task 4.
+  if (!doc["estimated_empty_date"].isNull())
+    oilTankAnalysis.estimated_empty_date = doc["estimated_empty_date"].as<String>();
+  if (!doc["total_consumption_since_refill"].isNull())
+    oilTankAnalysis.total_consumption_since_refill = doc["total_consumption_since_refill"].as<float>();
+  if (!doc["days_since_refill"].isNull())
+    oilTankAnalysis.days_since_refill = doc["days_since_refill"].as<int>();
+  if (!doc["avg_daily_consumption_l"].isNull())
+    oilTankAnalysis.avg_daily_consumption_l = doc["avg_daily_consumption_l"].as<float>();
+  if (!doc["estimated_daily_hot_water_consumption_l"].isNull())
+    oilTankAnalysis.estimated_daily_hot_water_consumption_l = doc["estimated_daily_hot_water_consumption_l"].as<float>();
+  if (!doc["estimated_daily_heating_consumption_l"].isNull())
+    oilTankAnalysis.estimated_daily_heating_consumption_l = doc["estimated_daily_heating_consumption_l"].as<float>();
 }
 
 static void parse_cost(JsonDocument &doc) {

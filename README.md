@@ -109,7 +109,7 @@ Once on WiFi, the device runs an always-on settings server. Visit
 serial at boot, e.g.:
 
 ```
-Settings page: http://172.16.0.130
+Settings page: http://192.168.1.42
 ```
 
 The settings page has two sections:

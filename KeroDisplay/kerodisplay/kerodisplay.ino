@@ -8,6 +8,7 @@
 #include "esp_system.h"
 #include <PubSubClient.h>
 #include <WebServer.h>
+#include <HTTPClient.h>
 #include <time.h>
 
 // MQTT settings
@@ -82,12 +83,80 @@ struct OilTankCost {
 };
 OilTankCost oilTankCost;
 
+// ----- Weather (Open-Meteo) -----
+struct WeatherDay {
+  int weather_code = 0;
+  float temp_max = 0;
+  float temp_min = 0;
+};
+struct WeatherData {
+  bool valid = false;
+  unsigned long fetched_ms = 0;
+  float temp_now = 0;
+  float temp_feels = 0;
+  int code_now = 0;
+  bool is_day = true;
+  WeatherDay daily[3];
+};
+WeatherData weatherData;
+
+// Location persisted in NVS "kerotank" namespace.
+static char weather_location[64] = "";
+static char weather_lat[16] = "";
+static char weather_lon[16] = "";
+
+// Geocoding result for the settings page (max 5 results shown).
+struct GeocodeMatch {
+  String name;
+  String country;
+  String admin1;
+  String latitude;
+  String longitude;
+};
+
+#define WEATHER_FETCH_INTERVAL_MS (15UL * 60UL * 1000UL)
+
 // MQTT reconnect state
 enum MqttState { MQTT_DOWN, MQTT_RECONNECTING, MQTT_UP };
 static MqttState mqtt_state = MQTT_DOWN;
 static unsigned long last_mqtt_attempt_ms = 0;
 static unsigned long mqtt_backoff_ms = 1000;
 static unsigned long last_mqtt_msg_ms = 0;  // wall-clock of last received message
+
+// Weather icons (defined in icon_*.c files in the sketch directory).
+LV_IMG_DECLARE(icon_blizzard);
+LV_IMG_DECLARE(icon_blowing_snow);
+LV_IMG_DECLARE(icon_clear_night);
+LV_IMG_DECLARE(icon_cloudy);
+LV_IMG_DECLARE(icon_drizzle);
+LV_IMG_DECLARE(icon_flurries);
+LV_IMG_DECLARE(icon_haze_fog_dust_smoke);
+LV_IMG_DECLARE(icon_heavy_rain);
+LV_IMG_DECLARE(icon_heavy_snow);
+LV_IMG_DECLARE(icon_isolated_scattered_tstorms_day);
+LV_IMG_DECLARE(icon_isolated_scattered_tstorms_night);
+LV_IMG_DECLARE(icon_mostly_clear_night);
+LV_IMG_DECLARE(icon_mostly_cloudy_day);
+LV_IMG_DECLARE(icon_mostly_cloudy_night);
+LV_IMG_DECLARE(icon_mostly_sunny);
+LV_IMG_DECLARE(icon_partly_cloudy);
+LV_IMG_DECLARE(icon_partly_cloudy_night);
+LV_IMG_DECLARE(icon_scattered_showers_day);
+LV_IMG_DECLARE(icon_scattered_showers_night);
+LV_IMG_DECLARE(icon_showers_rain);
+LV_IMG_DECLARE(icon_sleet_hail);
+LV_IMG_DECLARE(icon_snow_showers_snow);
+LV_IMG_DECLARE(icon_strong_tstorms);
+LV_IMG_DECLARE(icon_sunny);
+LV_IMG_DECLARE(icon_tornado);
+LV_IMG_DECLARE(icon_wintry_mix_rain_snow);
+
+// Latin Montserrat fonts (defined in lv_font_montserrat_latin_*.c, used for screen 4).
+LV_FONT_DECLARE(lv_font_montserrat_latin_12);
+LV_FONT_DECLARE(lv_font_montserrat_latin_14);
+LV_FONT_DECLARE(lv_font_montserrat_latin_16);
+LV_FONT_DECLARE(lv_font_montserrat_latin_20);
+LV_FONT_DECLARE(lv_font_montserrat_latin_42);
 
 typedef struct {
   lv_obj_t *icon_wifi;
@@ -174,6 +243,13 @@ void update_oiltank_ui();
 static void create_chrome(lv_obj_t *parent, screen_chrome_t *out, const char *dots_str);
 static void handle_settings_root();
 static void handle_settings_save();
+static const lv_img_dsc_t* choose_icon(int wmo_code, bool is_day);
+static const char* describe_weather(int wmo_code);
+static int geocode_location(const char *query, GeocodeMatch *out, int max_results);
+static bool fetch_weather();
+static void weather_task(void *param);
+static void weather_task_start();
+static void update_screen4();  // defined in a future task; declare so async_call can reference it
 
 void touchscreen_read(lv_indev_t *indev, lv_indev_data_t *data) {
   if (touchscreen.tirqTouched() && touchscreen.touched()) {
@@ -246,6 +322,7 @@ void setup() {
     settingsServer.on("/save", HTTP_POST, handle_settings_save);
     settingsServer.begin();
     Serial.print("Settings page: http://"); Serial.println(WiFi.localIP());
+    weather_task_start();
   } else {
     Serial.println("WiFi not connected, starting WiFiManager portal");
     show_setup_screen();
@@ -288,10 +365,21 @@ void setup() {
   mqtt_port = prefs.getInt("mqtt_port", 1883);
   String user = prefs.getString("mqtt_user", "");
   String pass = prefs.getString("mqtt_pass", "");
+  String locName = prefs.getString("loc_name", "");
+  String locLat = prefs.getString("loc_lat", "");
+  String locLon = prefs.getString("loc_lon", "");
   prefs.end();
   strncpy(mqtt_broker, broker.c_str(), sizeof(mqtt_broker));
   strncpy(mqtt_user, user.c_str(), sizeof(mqtt_user));
   strncpy(mqtt_pass, pass.c_str(), sizeof(mqtt_pass));
+  strncpy(weather_location, locName.c_str(), sizeof(weather_location) - 1);
+  weather_location[sizeof(weather_location) - 1] = '\0';
+  strncpy(weather_lat, locLat.c_str(), sizeof(weather_lat) - 1);
+  weather_lat[sizeof(weather_lat) - 1] = '\0';
+  strncpy(weather_lon, locLon.c_str(), sizeof(weather_lon) - 1);
+  weather_lon[sizeof(weather_lon) - 1] = '\0';
+  Serial.print("Weather location: '"); Serial.print(weather_location);
+  Serial.print("' ("); Serial.print(weather_lat); Serial.print(","); Serial.print(weather_lon); Serial.println(")");
   mqtt_is_configured = strlen(mqtt_broker) > 0 && strlen(mqtt_user) > 0;
   Serial.print("MQTT config: broker="); Serial.print(mqtt_broker);
   Serial.print(", port="); Serial.print(mqtt_port);
@@ -402,6 +490,202 @@ static void mqtt_try_reconnect() {
     else if (mqtt_backoff_ms < 30000) mqtt_backoff_ms = 30000;
     else                              mqtt_backoff_ms = 60000;
   }
+}
+
+// WMO weather code -> icon. is_day controls day/night variants where applicable.
+static const lv_img_dsc_t* choose_icon(int code, bool is_day) {
+  switch (code) {
+    case 0:  return is_day ? &icon_sunny : &icon_clear_night;
+    case 1:  return is_day ? &icon_mostly_sunny : &icon_mostly_clear_night;
+    case 2:  return is_day ? &icon_partly_cloudy : &icon_partly_cloudy_night;
+    case 3:  return &icon_cloudy;
+    case 45: case 48: return &icon_haze_fog_dust_smoke;
+    case 51: case 53: case 55: return &icon_drizzle;
+    case 56: case 57: return &icon_sleet_hail;
+    case 61: case 63: return &icon_showers_rain;
+    case 65: return &icon_heavy_rain;
+    case 66: case 67: return &icon_sleet_hail;
+    case 71: case 73: return &icon_snow_showers_snow;
+    case 75: return &icon_heavy_snow;
+    case 77: return &icon_flurries;
+    case 80: case 81: return is_day ? &icon_scattered_showers_day : &icon_scattered_showers_night;
+    case 82: return &icon_heavy_rain;
+    case 85: case 86: return &icon_snow_showers_snow;
+    case 95: return is_day ? &icon_isolated_scattered_tstorms_day : &icon_isolated_scattered_tstorms_night;
+    case 96: case 99: return &icon_strong_tstorms;
+    default: return &icon_cloudy;
+  }
+}
+
+static const char* describe_weather(int code) {
+  switch (code) {
+    case 0:  return "Clear";
+    case 1:  return "Mostly clear";
+    case 2:  return "Partly cloudy";
+    case 3:  return "Overcast";
+    case 45: case 48: return "Fog";
+    case 51: return "Light drizzle";
+    case 53: return "Drizzle";
+    case 55: return "Heavy drizzle";
+    case 56: case 57: return "Freezing drizzle";
+    case 61: return "Light rain";
+    case 63: return "Rain";
+    case 65: return "Heavy rain";
+    case 66: case 67: return "Freezing rain";
+    case 71: return "Light snow";
+    case 73: return "Snow";
+    case 75: return "Heavy snow";
+    case 77: return "Snow grains";
+    case 80: return "Light showers";
+    case 81: return "Showers";
+    case 82: return "Heavy showers";
+    case 85: return "Light snow showers";
+    case 86: return "Snow showers";
+    case 95: return "Thunderstorm";
+    case 96: case 99: return "Severe thunder";
+    default: return "Unknown";
+  }
+}
+
+// URL-encode a string for query parameters. Only handles characters likely to
+// appear in city names (spaces, common punctuation). Output written to dst,
+// truncated if cap is too small.
+static void url_encode(const char *s, char *dst, size_t cap) {
+  size_t o = 0;
+  for (const char *p = s; *p && o + 4 < cap; p++) {
+    unsigned char c = (unsigned char)*p;
+    if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+      dst[o++] = c;
+    } else if (c == ' ') {
+      dst[o++] = '+';
+    } else {
+      static const char hex[] = "0123456789ABCDEF";
+      dst[o++] = '%';
+      dst[o++] = hex[c >> 4];
+      dst[o++] = hex[c & 0xF];
+    }
+  }
+  dst[o] = '\0';
+}
+
+// Geocode a place name to up to max_results lat/lon matches.
+// Returns the number of matches, or -1 on error.
+static int geocode_location(const char *query, GeocodeMatch *out, int max_results) {
+  if (WiFi.status() != WL_CONNECTED) return -1;
+  if (!query || !*query) return 0;
+
+  char encoded[160];
+  url_encode(query, encoded, sizeof(encoded));
+  String url = String("https://geocoding-api.open-meteo.com/v1/search?count=")
+             + max_results + "&name=" + encoded;
+
+  HTTPClient http;
+  http.setTimeout(8000);
+  http.begin(url);
+  int rc = http.GET();
+  if (rc != HTTP_CODE_OK) {
+    Serial.print("Geocode HTTP "); Serial.println(rc);
+    http.end();
+    return -1;
+  }
+  String body = http.getString();
+  http.end();
+
+  JsonDocument doc;
+  DeserializationError err = deserializeJson(doc, body);
+  if (err) {
+    Serial.print("Geocode JSON parse: "); Serial.println(err.c_str());
+    return -1;
+  }
+
+  JsonArray results = doc["results"].as<JsonArray>();
+  int count = 0;
+  for (JsonVariant v : results) {
+    if (count >= max_results) break;
+    out[count].name = v["name"].as<String>();
+    out[count].country = v["country"].as<String>();
+    out[count].admin1 = v["admin1"].as<String>();
+    char lat[16], lon[16];
+    snprintf(lat, sizeof(lat), "%.4f", v["latitude"].as<float>());
+    snprintf(lon, sizeof(lon), "%.4f", v["longitude"].as<float>());
+    out[count].latitude = lat;
+    out[count].longitude = lon;
+    count++;
+  }
+  return count;
+}
+
+// Schedule a UI repaint of screen 4 on the LVGL thread. Safe to call from
+// the weather task. The lambda fires on the LVGL timer thread.
+static void schedule_screen4_update_cb(void *unused) {
+  // update_screen4() is defined in a later task; until then this is a no-op.
+  update_screen4();
+}
+
+// Fetch current + 3-day forecast from Open-Meteo. Returns true on success.
+// Populates global weatherData and schedules a screen 4 refresh.
+static bool fetch_weather() {
+  if (WiFi.status() != WL_CONNECTED) return false;
+  if (strlen(weather_lat) == 0 || strlen(weather_lon) == 0) return false;
+
+  String url = String("http://api.open-meteo.com/v1/forecast?latitude=")
+    + weather_lat + "&longitude=" + weather_lon
+    + "&current=temperature_2m,apparent_temperature,is_day,weather_code"
+    + "&daily=temperature_2m_min,temperature_2m_max,weather_code"
+    + "&forecast_days=3&timezone=auto";
+
+  HTTPClient http;
+  http.setTimeout(10000);
+  http.begin(url);
+  int rc = http.GET();
+  if (rc != HTTP_CODE_OK) {
+    Serial.print("Weather fetch HTTP "); Serial.println(rc);
+    http.end();
+    return false;
+  }
+  String body = http.getString();
+  http.end();
+
+  JsonDocument doc;
+  DeserializationError err = deserializeJson(doc, body);
+  if (err) {
+    Serial.print("Weather JSON parse: "); Serial.println(err.c_str());
+    return false;
+  }
+
+  weatherData.temp_now   = doc["current"]["temperature_2m"].as<float>();
+  weatherData.temp_feels = doc["current"]["apparent_temperature"].as<float>();
+  weatherData.code_now   = doc["current"]["weather_code"].as<int>();
+  weatherData.is_day     = doc["current"]["is_day"].as<int>() != 0;
+  for (int i = 0; i < 3; i++) {
+    weatherData.daily[i].weather_code = doc["daily"]["weather_code"][i].as<int>();
+    weatherData.daily[i].temp_max     = doc["daily"]["temperature_2m_max"][i].as<float>();
+    weatherData.daily[i].temp_min     = doc["daily"]["temperature_2m_min"][i].as<float>();
+  }
+  weatherData.valid = true;
+  weatherData.fetched_ms = millis();
+  Serial.println("Weather fetched OK");
+
+  lv_async_call(schedule_screen4_update_cb, nullptr);
+  return true;
+}
+
+// Background task: fetch weather every WEATHER_FETCH_INTERVAL_MS, with a 5s
+// initial delay so WiFi has time to fully come up after boot.
+static void weather_task(void *param) {
+  vTaskDelay(pdMS_TO_TICKS(5000));
+  for (;;) {
+    fetch_weather();
+    vTaskDelay(pdMS_TO_TICKS(WEATHER_FETCH_INTERVAL_MS));
+  }
+}
+
+static TaskHandle_t weatherTaskHandle = nullptr;
+static void weather_task_start() {
+  if (weatherTaskHandle != nullptr) return;
+  xTaskCreatePinnedToCore(
+    weather_task, "weather", 8192, nullptr, 1, &weatherTaskHandle, 0
+  );
 }
 
 static void handle_settings_root() {
@@ -937,6 +1221,9 @@ static void apply_leak_state() {
   apply_leak_to(&s2.chrome, leak);
   apply_leak_to(&s3.chrome, leak);
 }
+
+// Defined in a future task; stub for now so weather data flow works.
+static void update_screen4() { /* no-op until screen 4 is built */ }
 
 void update_oiltank_ui() {
   apply_leak_state();

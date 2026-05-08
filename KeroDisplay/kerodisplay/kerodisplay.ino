@@ -327,16 +327,21 @@ void setup() {
   create_screen3();
   lv_scr_load(screen1);
   current_screen = 1;
-  // Set up tap-to-switch with debounce
-  lv_obj_add_event_cb(lv_scr_act(), [](lv_event_t *e) {
+  // Set up auto-switch timer with screen-1 hold duration; load_screen() updates
+  // the period on every advance so the timer matches the active screen.
+  auto_switch_timer = lv_timer_create(auto_switch_cb, hold_for(1), NULL);
+
+  // Tap anywhere on any screen advances to next and resets the timer.
+  auto tap_cb = [](lv_event_t *e) {
     unsigned long now = millis();
     if (now - last_screen_switch > screen_switch_debounce) {
       switch_screen();
       last_screen_switch = now;
     }
-  }, LV_EVENT_CLICKED, NULL);
-  // Set up auto-switch timer (2 minutes)
-  auto_switch_timer = lv_timer_create(auto_switch_cb, 120000, NULL);
+  };
+  lv_obj_add_event_cb(screen1, tap_cb, LV_EVENT_CLICKED, NULL);
+  lv_obj_add_event_cb(screen2, tap_cb, LV_EVENT_CLICKED, NULL);
+  lv_obj_add_event_cb(screen3, tap_cb, LV_EVENT_CLICKED, NULL);
   lv_timer_create(update_status_bars_cb, 1000, NULL);
 
   // NTP time sync
@@ -981,23 +986,28 @@ void show_setup_complete_screen() {
   while (1) delay(100); // Halt here
 }
 
-void switch_screen() {
-  if (current_screen == 1) {
-    lv_scr_load(screen2);
-    current_screen = 2;
-  } else {
-    lv_scr_load(screen1);
-    current_screen = 1;
+static uint32_t hold_for(int screen) {
+  switch (screen) {
+    case 1: return SCREEN1_HOLD_MS;
+    case 2: return SCREEN2_HOLD_MS;
+    default: return SCREEN3_HOLD_MS;
   }
-  last_screen_switch = millis();
-  // Re-attach tap event to new screen with debounce
-  lv_obj_add_event_cb(lv_scr_act(), [](lv_event_t *e) {
-    unsigned long now = millis();
-    if (now - last_screen_switch > screen_switch_debounce) {
-      switch_screen();
-      last_screen_switch = now;
-    }
-  }, LV_EVENT_CLICKED, NULL);
+}
+
+static void load_screen(int n) {
+  current_screen = n;
+  switch (n) {
+    case 1: lv_scr_load(screen1); break;
+    case 2: lv_scr_load(screen2); break;
+    default: n = 3; lv_scr_load(screen3); break;
+  }
+  if (auto_switch_timer) lv_timer_set_period(auto_switch_timer, hold_for(n));
+}
+
+void switch_screen() {
+  int next = current_screen + 1;
+  if (next > 3) next = 1;
+  load_screen(next);
 }
 
 void auto_switch_cb(lv_timer_t *timer) {

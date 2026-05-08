@@ -512,7 +512,8 @@ void create_screen1() {
   lv_bar_set_value(s1.bar_fill, 0, LV_ANIM_OFF);
   lv_obj_set_style_bg_color(s1.bar_fill, lv_color_hex(0x2a2f3a), LV_PART_MAIN);
   lv_obj_set_style_bg_color(s1.bar_fill, lv_color_hex(0x4ade80), LV_PART_INDICATOR);
-  lv_obj_set_style_radius(s1.bar_fill, 6, LV_PART_MAIN | LV_PART_INDICATOR);
+  lv_obj_set_style_radius(s1.bar_fill, 6, LV_PART_MAIN);
+  lv_obj_set_style_radius(s1.bar_fill, 6, LV_PART_INDICATOR);
 
   s1.lbl_empty_date = lv_label_create(c);
   lv_label_set_text(s1.lbl_empty_date, "Empty -- - -- days");

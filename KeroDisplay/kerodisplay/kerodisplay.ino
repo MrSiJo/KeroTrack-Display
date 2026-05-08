@@ -243,6 +243,8 @@ void update_oiltank_ui();
 static void create_chrome(lv_obj_t *parent, screen_chrome_t *out, const char *dots_str);
 static void handle_settings_root();
 static void handle_settings_save();
+static void handle_search_location();
+static void handle_save_location();
 static const lv_img_dsc_t* choose_icon(int wmo_code, bool is_day);
 static const char* describe_weather(int wmo_code);
 static int geocode_location(const char *query, GeocodeMatch *out, int max_results);
@@ -320,6 +322,8 @@ void setup() {
     // Settings web server (always available while WiFi is up)
     settingsServer.on("/", handle_settings_root);
     settingsServer.on("/save", HTTP_POST, handle_settings_save);
+    settingsServer.on("/search_location", HTTP_POST, handle_search_location);
+    settingsServer.on("/save_location", HTTP_POST, handle_save_location);
     settingsServer.begin();
     Serial.print("Settings page: http://"); Serial.println(WiFi.localIP());
     weather_task_start();
@@ -694,15 +698,21 @@ static void handle_settings_root() {
     "<meta name='viewport' content='width=device-width,initial-scale=1'>"
     "<title>KeroTrack Settings</title>"
     "<style>"
-    "body{font-family:system-ui,sans-serif;background:#181c24;color:#eee;padding:24px;max-width:420px;margin:0 auto}"
-    "h1{font-size:22px;margin:0 0 24px;color:#4ade80}"
+    "body{font-family:system-ui,sans-serif;background:#181c24;color:#eee;padding:24px;max-width:480px;margin:0 auto}"
+    "h1{font-size:22px;margin:0 0 8px;color:#4ade80}"
+    "h2{font-size:17px;margin:28px 0 12px;color:#aaa;border-bottom:1px solid #333;padding-bottom:6px}"
+    "form{margin:0}"
     "label{display:block;font-size:13px;color:#aaa;margin-top:14px}"
     "input{width:100%;padding:9px 10px;margin-top:4px;background:#232a34;color:#eee;border:1px solid #444b58;border-radius:5px;box-sizing:border-box;font-size:15px}"
-    "button{margin-top:20px;padding:11px 18px;background:#4ade80;color:#181c24;border:0;border-radius:5px;font-weight:600;cursor:pointer;font-size:15px}"
+    "button{margin-top:18px;padding:11px 18px;background:#4ade80;color:#181c24;border:0;border-radius:5px;font-weight:600;cursor:pointer;font-size:15px}"
     "p.note{font-size:12px;color:#888;margin-top:6px}"
+    ".kv{font-family:monospace;color:#fcd34d;background:#232a34;padding:6px 10px;border-radius:4px;display:inline-block;margin-top:4px}"
     ".ip{font-family:monospace;color:#4ade80}"
     "</style></head><body>"
     "<h1>KeroTrack Settings</h1>"
+    "<p class='note'>Device IP: <span class='ip'>__IP__</span></p>"
+
+    "<h2>MQTT</h2>"
     "<form method='POST' action='/save'>"
     "<label>MQTT broker</label>"
     "<input name='broker' value='__BROKER__' placeholder='192.168.1.10'>"
@@ -712,15 +722,35 @@ static void handle_settings_root() {
     "<input name='user' value='__USER__'>"
     "<label>Password</label>"
     "<input name='pass' type='password' placeholder='leave blank to keep existing'>"
-    "<p class='note'>Saving reboots the device. Current IP: <span class='ip'>__IP__</span></p>"
-    "<button type='submit'>Save and reboot</button>"
+    "<p class='note'>Saving reboots the device.</p>"
+    "<button type='submit'>Save MQTT and reboot</button>"
     "</form>"
+
+    "<h2>Weather</h2>"
+    "<form method='POST' action='/search_location'>"
+    "<p class='note'>Current location:</p>"
+    "<div class='kv'>__LOCDISPLAY__</div>"
+    "<label>Change location</label>"
+    "<input name='location' placeholder='e.g. Surrey, GB or RH1 2AB'>"
+    "<p class='note'>Leave blank to disable weather. Search hits the Open-Meteo geocoding API.</p>"
+    "<button type='submit'>Search and change</button>"
+    "</form>"
+
     "</body></html>"
   );
   html.replace("__BROKER__", String(mqtt_broker));
   html.replace("__PORT__", String(mqtt_port));
   html.replace("__USER__", String(mqtt_user));
   html.replace("__IP__", WiFi.localIP().toString());
+
+  String locDisplay;
+  if (strlen(weather_location) > 0) {
+    locDisplay = String(weather_location) + " (" + weather_lat + ", " + weather_lon + ")";
+  } else {
+    locDisplay = "(not configured)";
+  }
+  html.replace("__LOCDISPLAY__", locDisplay);
+
   settingsServer.send(200, "text/html", html);
 }
 
@@ -757,6 +787,136 @@ static void handle_settings_save() {
   settingsServer.send(200, "text/html",
     "<!doctype html><html><body style='font-family:sans-serif;background:#181c24;color:#eee;padding:24px;text-align:center'>"
     "<h2>Saved</h2><p>Rebooting...</p></body></html>");
+  delay(1500);
+  ESP.restart();
+}
+
+static void handle_search_location() {
+  String name = settingsServer.arg("location");
+  name.trim();
+
+  // Empty input = clear/disable weather.
+  if (name.length() == 0) {
+    prefs.begin("kerotank", false);
+    prefs.putString("loc_name", "");
+    prefs.putString("loc_lat", "");
+    prefs.putString("loc_lon", "");
+    prefs.end();
+    weather_location[0] = '\0';
+    weather_lat[0] = '\0';
+    weather_lon[0] = '\0';
+    Serial.println("Weather location cleared");
+    settingsServer.send(200, "text/html",
+      "<!doctype html><html><head><meta charset='utf-8'>"
+      "<style>body{font-family:system-ui,sans-serif;background:#181c24;color:#eee;padding:24px;max-width:420px;margin:0 auto;text-align:center}"
+      "a{color:#4ade80}</style></head><body>"
+      "<h2>Weather disabled</h2>"
+      "<p>Location cleared. The weather screen will hide on next boot.</p>"
+      "<p><a href='/'>Back</a> &middot; <a href='javascript:void(0)' onclick='setTimeout(()=>location.reload(),100)'>Reboot now to apply</a></p>"
+      "</body></html>");
+    return;
+  }
+
+  GeocodeMatch matches[5];
+  int count = geocode_location(name.c_str(), matches, 5);
+
+  if (count < 0) {
+    settingsServer.send(200, "text/html",
+      "<!doctype html><html><head><meta charset='utf-8'>"
+      "<style>body{font-family:system-ui,sans-serif;background:#181c24;color:#eee;padding:24px;max-width:420px;margin:0 auto}"
+      "a{color:#4ade80}</style></head><body>"
+      "<h2>Lookup failed</h2>"
+      "<p class='note'>Network error or geocoding API unavailable. Check WiFi and try again.</p>"
+      "<p><a href='/'>Back</a></p>"
+      "</body></html>");
+    return;
+  }
+  if (count == 0) {
+    String html = "<!doctype html><html><head><meta charset='utf-8'>"
+      "<style>body{font-family:system-ui,sans-serif;background:#181c24;color:#eee;padding:24px;max-width:420px;margin:0 auto}"
+      "a{color:#4ade80}</style></head><body>"
+      "<h2>No matches</h2>"
+      "<p>Couldn't find anywhere called \"" + name + "\". Try a town/city or postcode.</p>"
+      "<p><a href='/'>Back</a></p></body></html>";
+    settingsServer.send(200, "text/html", html);
+    return;
+  }
+
+  // 1+ matches — render confirmation form.
+  String html = F("<!doctype html><html><head><meta charset='utf-8'>"
+    "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+    "<title>Confirm location</title>"
+    "<style>"
+    "body{font-family:system-ui,sans-serif;background:#181c24;color:#eee;padding:24px;max-width:480px;margin:0 auto}"
+    "h2{color:#4ade80;font-size:20px}"
+    "label.match{display:block;background:#232a34;border:1px solid #444b58;border-radius:6px;padding:10px 12px;margin-top:8px;cursor:pointer}"
+    "label.match input{margin-right:10px}"
+    "label.match .name{font-weight:600}"
+    "label.match .coord{color:#888;font-family:monospace;font-size:12px;display:block;margin-top:2px}"
+    "button{margin-top:18px;padding:11px 18px;background:#4ade80;color:#181c24;border:0;border-radius:5px;font-weight:600;cursor:pointer;font-size:15px}"
+    "a{color:#888}"
+    "</style></head><body>"
+    "<h2>Confirm location</h2>"
+    "<p>Pick the match that fits best:</p>"
+    "<form method='POST' action='/save_location'>");
+  for (int i = 0; i < count; i++) {
+    String label = matches[i].name;
+    if (matches[i].admin1.length()) label += ", " + matches[i].admin1;
+    if (matches[i].country.length()) label += ", " + matches[i].country;
+    html += "<label class='match'>"
+            "<input type='radio' name='choice' value='" + String(i) + "'";
+    if (i == 0) html += " checked";
+    html += "><span class='name'>" + label + "</span>"
+            "<span class='coord'>" + matches[i].latitude + ", " + matches[i].longitude + "</span></label>";
+
+    html += "<input type='hidden' name='name_" + String(i) + "' value='" + label + "'>";
+    html += "<input type='hidden' name='lat_" + String(i) + "' value='" + matches[i].latitude + "'>";
+    html += "<input type='hidden' name='lon_" + String(i) + "' value='" + matches[i].longitude + "'>";
+  }
+  html += "<button type='submit'>Save and reboot</button>"
+          "<p><a href='/'>Cancel</a></p></form></body></html>";
+  settingsServer.send(200, "text/html", html);
+}
+
+static void handle_save_location() {
+  if (!settingsServer.hasArg("choice")) {
+    settingsServer.send(400, "text/plain", "Missing choice");
+    return;
+  }
+  int idx = settingsServer.arg("choice").toInt();
+  if (idx < 0 || idx > 4) {
+    settingsServer.send(400, "text/plain", "Invalid choice");
+    return;
+  }
+  String name = settingsServer.arg(String("name_") + idx);
+  String lat  = settingsServer.arg(String("lat_") + idx);
+  String lon  = settingsServer.arg(String("lon_") + idx);
+  if (lat.length() == 0 || lon.length() == 0) {
+    settingsServer.send(400, "text/plain", "Missing lat/lon for chosen match");
+    return;
+  }
+
+  strncpy(weather_location, name.c_str(), sizeof(weather_location) - 1);
+  weather_location[sizeof(weather_location) - 1] = '\0';
+  strncpy(weather_lat, lat.c_str(), sizeof(weather_lat) - 1);
+  weather_lat[sizeof(weather_lat) - 1] = '\0';
+  strncpy(weather_lon, lon.c_str(), sizeof(weather_lon) - 1);
+  weather_lon[sizeof(weather_lon) - 1] = '\0';
+
+  prefs.begin("kerotank", false);
+  prefs.putString("loc_name", weather_location);
+  prefs.putString("loc_lat", weather_lat);
+  prefs.putString("loc_lon", weather_lon);
+  prefs.end();
+
+  Serial.print("Location saved via web: "); Serial.print(weather_location);
+  Serial.print(" ("); Serial.print(weather_lat); Serial.print(","); Serial.print(weather_lon); Serial.println(")");
+
+  settingsServer.send(200, "text/html",
+    "<!doctype html><html><head><meta charset='utf-8'></head>"
+    "<body style='font-family:system-ui,sans-serif;background:#181c24;color:#eee;padding:24px;text-align:center;max-width:420px;margin:0 auto'>"
+    "<h2 style='color:#4ade80'>Location saved</h2>"
+    "<p>Rebooting...</p></body></html>");
   delay(1500);
   ESP.restart();
 }

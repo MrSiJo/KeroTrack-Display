@@ -646,6 +646,7 @@ void create_screen3() {
   lv_obj_set_style_radius(s3.cell_to_fill, 6, LV_PART_MAIN);
   lv_obj_set_style_pad_all(s3.cell_to_fill, 4, LV_PART_MAIN);
   lv_obj_clear_flag(s3.cell_to_fill, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_flag(s3.cell_to_fill, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
 
   s3.lbl_cost_to_fill = lv_label_create(s3.cell_to_fill);
   lv_label_set_text(s3.lbl_cost_to_fill, "£--");

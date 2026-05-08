@@ -1262,9 +1262,9 @@ void create_screen4() {
   lv_obj_t *c = s4.chrome.content;
 
   // Hero weather icon (20x20 native, scaled 3x = 60 visible).
-  s4.icon_hero = lv_image_create(c);
-  lv_image_set_src(s4.icon_hero, &icon_cloudy);
-  lv_image_set_scale(s4.icon_hero, 768);  // 3x in LVGL units (256 = 1x)
+  s4.icon_hero = lv_img_create(c);
+  lv_img_set_src(s4.icon_hero, &icon_cloudy);
+  lv_img_set_zoom(s4.icon_hero, 768);  // 3x in LVGL units (256 = 1x)
   lv_obj_align(s4.icon_hero, LV_ALIGN_TOP_MID, 0, 25);
   lv_obj_add_flag(s4.icon_hero, LV_OBJ_FLAG_EVENT_BUBBLE);
 
@@ -1300,8 +1300,8 @@ void create_screen4() {
   for (int i = 0; i < 3; i++) {
     int y = 192 + i * 22;
 
-    s4.daily_icon[i] = lv_image_create(c);
-    lv_image_set_src(s4.daily_icon[i], &icon_cloudy);
+    s4.daily_icon[i] = lv_img_create(c);
+    lv_img_set_src(s4.daily_icon[i], &icon_cloudy);
     lv_obj_align(s4.daily_icon[i], LV_ALIGN_TOP_LEFT, 30, y);
     lv_obj_add_flag(s4.daily_icon[i], LV_OBJ_FLAG_EVENT_BUBBLE);
 
@@ -1481,7 +1481,7 @@ static void update_screen4() {
 
   // -- Active state --
   lv_obj_clear_flag(s4.icon_hero, LV_OBJ_FLAG_HIDDEN);
-  lv_image_set_src(s4.icon_hero, choose_icon(weatherData.code_now, weatherData.is_day));
+  lv_img_set_src(s4.icon_hero, choose_icon(weatherData.code_now, weatherData.is_day));
 
   snprintf(buf, sizeof(buf), "%.0f\xc2\xb0", weatherData.temp_now);
   lv_label_set_text(s4.lbl_temp, buf);
@@ -1497,7 +1497,7 @@ static void update_screen4() {
 
   for (int i = 0; i < 3; i++) {
     lv_obj_clear_flag(s4.daily_icon[i], LV_OBJ_FLAG_HIDDEN);
-    lv_image_set_src(s4.daily_icon[i], choose_icon(weatherData.daily[i].weather_code, true));
+    lv_img_set_src(s4.daily_icon[i], choose_icon(weatherData.daily[i].weather_code, true));
 
     if (i == 0) {
       lv_label_set_text(s4.daily_day[i], "Today");

@@ -782,13 +782,13 @@ void create_screen3() {
   lv_obj_add_flag(s3.pip, LV_OBJ_FLAG_EVENT_BUBBLE);
 
   s3.lbl_ppl = lv_label_create(c);
-  lv_label_set_text(s3.lbl_ppl, "-- p/L");
+  lv_label_set_text(s3.lbl_ppl, "--");
   lv_obj_set_style_text_font(s3.lbl_ppl, &lv_font_montserrat_28, LV_PART_MAIN);
   lv_obj_set_style_text_color(s3.lbl_ppl, lv_color_hex(0xeeeeee), LV_PART_MAIN);
   lv_obj_align(s3.lbl_ppl, LV_ALIGN_TOP_RIGHT, -15, 175);
 
   lv_obj_t *ppl_label = lv_label_create(c);
-  lv_label_set_text(ppl_label, "current ppl");
+  lv_label_set_text(ppl_label, "current p/L");
   lv_obj_set_style_text_font(ppl_label, &lv_font_montserrat_14, LV_PART_MAIN);
   lv_obj_set_style_text_color(ppl_label, lv_color_hex(0x888888), LV_PART_MAIN);
   lv_obj_align(ppl_label, LV_ALIGN_TOP_RIGHT, -15, 215);
@@ -896,7 +896,7 @@ static void update_screen3() {
   snprintf(buf, sizeof(buf), "%.0f", oilTankData.cost_to_fill);
   lv_label_set_text(s3.lbl_cost_to_fill, buf);
 
-  snprintf(buf, sizeof(buf), "%.1f p/L", oilTankData.current_ppl);
+  snprintf(buf, sizeof(buf), "%.1f", oilTankData.current_ppl);
   lv_label_set_text(s3.lbl_ppl, buf);
 
   // 500L threshold styling on the to-fill cell

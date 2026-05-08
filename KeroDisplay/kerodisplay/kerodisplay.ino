@@ -7,6 +7,7 @@
 #include <Preferences.h>
 #include "esp_system.h"
 #include <PubSubClient.h>
+#include <WebServer.h>
 #include <time.h>
 
 // MQTT settings
@@ -44,6 +45,7 @@ static bool mqtt_is_configured = false;
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
+WebServer settingsServer(80);
 
 // Oil tank data structure
 struct OilTankData {
@@ -170,6 +172,8 @@ void auto_switch_cb(lv_timer_t *timer);
 void show_boot_screen();
 void update_oiltank_ui();
 static void create_chrome(lv_obj_t *parent, screen_chrome_t *out, const char *dots_str);
+static void handle_settings_root();
+static void handle_settings_save();
 
 void touchscreen_read(lv_indev_t *indev, lv_indev_data_t *data) {
   if (touchscreen.tirqTouched() && touchscreen.touched()) {
@@ -237,6 +241,11 @@ void setup() {
   if (WiFi.status() == WL_CONNECTED) {
     Serial.print("Connected to WiFi. IP address: ");
     Serial.println(WiFi.localIP());
+    // Settings web server (always available while WiFi is up)
+    settingsServer.on("/", handle_settings_root);
+    settingsServer.on("/save", HTTP_POST, handle_settings_save);
+    settingsServer.begin();
+    Serial.print("Settings page: http://"); Serial.println(WiFi.localIP());
   } else {
     Serial.println("WiFi not connected, starting WiFiManager portal");
     show_setup_screen();
@@ -345,7 +354,7 @@ void setup() {
   lv_timer_create(update_status_bars_cb, 1000, NULL);
 
   // NTP time sync
-  configTime(0, 0, "0.uk.pool.ntp.org", "1.uk.pool.ntp.org");
+  configTzTime("GMT0BST,M3.5.0/1,M10.5.0", "0.uk.pool.ntp.org", "1.uk.pool.ntp.org");
   Serial.println("Waiting for NTP time sync...");
   time_t now = 0;
   int ntp_attempts = 0;
@@ -395,8 +404,82 @@ static void mqtt_try_reconnect() {
   }
 }
 
+static void handle_settings_root() {
+  String html = F(
+    "<!doctype html><html><head><meta charset='utf-8'>"
+    "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+    "<title>KeroTrack Settings</title>"
+    "<style>"
+    "body{font-family:system-ui,sans-serif;background:#181c24;color:#eee;padding:24px;max-width:420px;margin:0 auto}"
+    "h1{font-size:22px;margin:0 0 24px;color:#4ade80}"
+    "label{display:block;font-size:13px;color:#aaa;margin-top:14px}"
+    "input{width:100%;padding:9px 10px;margin-top:4px;background:#232a34;color:#eee;border:1px solid #444b58;border-radius:5px;box-sizing:border-box;font-size:15px}"
+    "button{margin-top:20px;padding:11px 18px;background:#4ade80;color:#181c24;border:0;border-radius:5px;font-weight:600;cursor:pointer;font-size:15px}"
+    "p.note{font-size:12px;color:#888;margin-top:6px}"
+    ".ip{font-family:monospace;color:#4ade80}"
+    "</style></head><body>"
+    "<h1>KeroTrack Settings</h1>"
+    "<form method='POST' action='/save'>"
+    "<label>MQTT broker</label>"
+    "<input name='broker' value='__BROKER__' placeholder='192.168.1.10'>"
+    "<label>Port</label>"
+    "<input name='port' type='number' min='1' max='65535' value='__PORT__'>"
+    "<label>Username</label>"
+    "<input name='user' value='__USER__'>"
+    "<label>Password</label>"
+    "<input name='pass' type='password' placeholder='leave blank to keep existing'>"
+    "<p class='note'>Saving reboots the device. Current IP: <span class='ip'>__IP__</span></p>"
+    "<button type='submit'>Save and reboot</button>"
+    "</form>"
+    "</body></html>"
+  );
+  html.replace("__BROKER__", String(mqtt_broker));
+  html.replace("__PORT__", String(mqtt_port));
+  html.replace("__USER__", String(mqtt_user));
+  html.replace("__IP__", WiFi.localIP().toString());
+  settingsServer.send(200, "text/html", html);
+}
+
+static void handle_settings_save() {
+  if (settingsServer.hasArg("broker")) {
+    String v = settingsServer.arg("broker");
+    strncpy(mqtt_broker, v.c_str(), sizeof(mqtt_broker) - 1);
+    mqtt_broker[sizeof(mqtt_broker) - 1] = '\0';
+  }
+  if (settingsServer.hasArg("port")) {
+    int p = settingsServer.arg("port").toInt();
+    if (p >= 1 && p <= 65535) mqtt_port = p;
+  }
+  if (settingsServer.hasArg("user")) {
+    String v = settingsServer.arg("user");
+    strncpy(mqtt_user, v.c_str(), sizeof(mqtt_user) - 1);
+    mqtt_user[sizeof(mqtt_user) - 1] = '\0';
+  }
+  String passArg = settingsServer.arg("pass");
+  bool pass_changed = passArg.length() > 0;
+  if (pass_changed) {
+    strncpy(mqtt_pass, passArg.c_str(), sizeof(mqtt_pass) - 1);
+    mqtt_pass[sizeof(mqtt_pass) - 1] = '\0';
+  }
+
+  prefs.begin("kerotank", false);
+  prefs.putString("mqtt_broker", mqtt_broker);
+  prefs.putInt("mqtt_port", mqtt_port);
+  prefs.putString("mqtt_user", mqtt_user);
+  if (pass_changed) prefs.putString("mqtt_pass", mqtt_pass);
+  prefs.end();
+
+  Serial.println("Settings saved via web; rebooting in 1.5s");
+  settingsServer.send(200, "text/html",
+    "<!doctype html><html><body style='font-family:sans-serif;background:#181c24;color:#eee;padding:24px;text-align:center'>"
+    "<h2>Saved</h2><p>Rebooting...</p></body></html>");
+  delay(1500);
+  ESP.restart();
+}
+
 void loop() {
   lv_timer_handler();
+  settingsServer.handleClient();
   if (mqtt_is_configured) {
     mqttClient.loop();
     mqtt_try_reconnect();

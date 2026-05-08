@@ -87,9 +87,61 @@ static unsigned long last_mqtt_attempt_ms = 0;
 static unsigned long mqtt_backoff_ms = 1000;
 static unsigned long last_mqtt_msg_ms = 0;  // wall-clock of last received message
 
+typedef struct {
+  lv_obj_t *icon_wifi;
+  lv_obj_t *dot_mqtt;
+  lv_obj_t *lbl_clock;
+  lv_obj_t *lbl_age;
+} status_bar_widgets_t;
+
+typedef struct {
+  status_bar_widgets_t sb;
+  lv_obj_t *ribbon;        // leak ribbon container, hidden by default
+  lv_obj_t *ribbon_label;  // text inside the ribbon
+  lv_obj_t *content;       // container all screen content lives in (shifts when ribbon shown)
+  lv_obj_t *dots;          // bottom screen-indicator dots
+} screen_chrome_t;
+
+typedef struct {
+  screen_chrome_t chrome;
+  lv_obj_t *lbl_pct;
+  lv_obj_t *lbl_litres;
+  lv_obj_t *bar_fill;       // an lv_bar inside content
+  lv_obj_t *lbl_empty_date; // "Empty 23 Aug 2026 - 47 days"
+} screen1_widgets_t;
+
+typedef struct {
+  screen_chrome_t chrome;
+  lv_obj_t *lbl_used;
+  lv_obj_t *lbl_over_days;
+  lv_obj_t *bar_split_hw;
+  lv_obj_t *bar_split_heat;
+  lv_obj_t *lbl_hw_legend;
+  lv_obj_t *lbl_heat_legend;
+  lv_obj_t *lbl_avg_burn;
+  lv_obj_t *lbl_refill_note;
+} screen2_widgets_t;
+
+typedef struct {
+  screen_chrome_t chrome;
+  lv_obj_t *lbl_avg_monthly;
+  lv_obj_t *lbl_avg_weekly;
+  lv_obj_t *lbl_avg_annual;
+  lv_obj_t *cell_to_fill;
+  lv_obj_t *lbl_cost_to_fill;
+  lv_obj_t *lbl_to_fill_label;
+  lv_obj_t *pip;
+  lv_obj_t *lbl_ppl;
+} screen3_widgets_t;
+
+static screen1_widgets_t s1;
+static screen2_widgets_t s2;
+static screen3_widgets_t s3;
+
 // Oil tank UI objects
 static lv_obj_t *screen1 = nullptr;
 static lv_obj_t *screen2 = nullptr;
+static lv_obj_t *screen3 = nullptr;
 static int current_screen = 1;
 static lv_timer_t *auto_switch_timer = nullptr;
 
@@ -112,11 +164,12 @@ OilTankAnalysis oilTankAnalysis;
 // Forward declarations
 void create_screen1();
 void create_screen2();
+void create_screen3();
 void switch_screen();
 void auto_switch_cb(lv_timer_t *timer);
-void bar_update(lv_obj_t *bars_container, int bars_remaining);
 void show_boot_screen();
 void update_oiltank_ui();
+static void create_chrome(lv_obj_t *parent, screen_chrome_t *out, const char *dots_str);
 
 void touchscreen_read(lv_indev_t *indev, lv_indev_data_t *data) {
   if (touchscreen.tirqTouched() && touchscreen.touched()) {
@@ -271,6 +324,7 @@ void setup() {
   Serial.println("Creating oil tank UI...");
   create_screen1();
   create_screen2();
+  create_screen3();
   lv_scr_load(screen1);
   current_screen = 1;
   // Set up tap-to-switch with debounce
@@ -345,193 +399,109 @@ void loop() {
   delay(5);
 }
 
+static void create_chrome(lv_obj_t *parent, screen_chrome_t *out, const char *dots_str) {
+  // Background (matches existing dark theme)
+  lv_obj_set_style_bg_color(parent, lv_color_hex(0x181c24), LV_PART_MAIN);
+  lv_obj_set_style_bg_grad_color(parent, lv_color_hex(0x232a34), LV_PART_MAIN);
+  lv_obj_set_style_bg_grad_dir(parent, LV_GRAD_DIR_VER, LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_set_style_pad_all(parent, 0, LV_PART_MAIN);
+  lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
+
+  // --- Status bar (36px) ---
+  lv_obj_t *sb = lv_obj_create(parent);
+  lv_obj_set_size(sb, SCREEN_WIDTH, 36);
+  lv_obj_align(sb, LV_ALIGN_TOP_MID, 0, 0);
+  lv_obj_set_style_bg_opa(sb, LV_OPA_TRANSP, LV_PART_MAIN);
+  lv_obj_set_style_border_width(sb, 0, LV_PART_MAIN);
+  lv_obj_set_style_pad_hor(sb, 8, LV_PART_MAIN);
+  lv_obj_set_style_pad_ver(sb, 6, LV_PART_MAIN);
+  lv_obj_clear_flag(sb, LV_OBJ_FLAG_SCROLLABLE);
+
+  out->sb.icon_wifi = lv_label_create(sb);
+  lv_label_set_text(out->sb.icon_wifi, LV_SYMBOL_WIFI);
+  lv_obj_set_style_text_font(out->sb.icon_wifi, &lv_font_montserrat_16, LV_PART_MAIN);
+  lv_obj_set_style_text_color(out->sb.icon_wifi, lv_color_hex(0x88a0c0), LV_PART_MAIN);
+  lv_obj_align(out->sb.icon_wifi, LV_ALIGN_LEFT_MID, 0, 0);
+
+  out->sb.dot_mqtt = lv_obj_create(sb);
+  lv_obj_set_size(out->sb.dot_mqtt, 10, 10);
+  lv_obj_set_style_radius(out->sb.dot_mqtt, 5, LV_PART_MAIN);
+  lv_obj_set_style_bg_color(out->sb.dot_mqtt, lv_color_hex(0x4ade80), LV_PART_MAIN);
+  lv_obj_set_style_border_width(out->sb.dot_mqtt, 0, LV_PART_MAIN);
+  lv_obj_align(out->sb.dot_mqtt, LV_ALIGN_LEFT_MID, 28, 0);
+
+  out->sb.lbl_clock = lv_label_create(sb);
+  lv_label_set_text(out->sb.lbl_clock, "");
+  lv_obj_set_style_text_font(out->sb.lbl_clock, &lv_font_montserrat_16, LV_PART_MAIN);
+  lv_obj_set_style_text_color(out->sb.lbl_clock, lv_color_hex(0x88a0c0), LV_PART_MAIN);
+  lv_obj_align(out->sb.lbl_clock, LV_ALIGN_CENTER, 0, 0);
+
+  out->sb.lbl_age = lv_label_create(sb);
+  lv_label_set_text(out->sb.lbl_age, "--");
+  lv_obj_set_style_text_font(out->sb.lbl_age, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(out->sb.lbl_age, lv_color_hex(0x88a0c0), LV_PART_MAIN);
+  lv_obj_align(out->sb.lbl_age, LV_ALIGN_RIGHT_MID, 0, 0);
+
+  // --- Leak ribbon (28px), hidden by default ---
+  out->ribbon = lv_obj_create(parent);
+  lv_obj_set_size(out->ribbon, SCREEN_WIDTH, 28);
+  lv_obj_align(out->ribbon, LV_ALIGN_TOP_MID, 0, 36);
+  lv_obj_set_style_bg_color(out->ribbon, lv_color_hex(0x8b2323), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(out->ribbon, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_set_style_border_width(out->ribbon, 0, LV_PART_MAIN);
+  lv_obj_set_style_pad_all(out->ribbon, 0, LV_PART_MAIN);
+  lv_obj_clear_flag(out->ribbon, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_flag(out->ribbon, LV_OBJ_FLAG_HIDDEN);
+
+  out->ribbon_label = lv_label_create(out->ribbon);
+  lv_label_set_text(out->ribbon_label, "LEAK DETECTED");
+  lv_obj_set_style_text_font(out->ribbon_label, &lv_font_montserrat_16, LV_PART_MAIN);
+  lv_obj_set_style_text_color(out->ribbon_label, lv_color_hex(0xffffff), LV_PART_MAIN);
+  lv_obj_align(out->ribbon_label, LV_ALIGN_CENTER, 0, 0);
+
+  // --- Content container (everything between status bar and dots) ---
+  out->content = lv_obj_create(parent);
+  lv_obj_set_size(out->content, SCREEN_WIDTH, SCREEN_HEIGHT - 36 - 28);
+  lv_obj_align(out->content, LV_ALIGN_TOP_MID, 0, 36);
+  lv_obj_set_style_bg_opa(out->content, LV_OPA_TRANSP, LV_PART_MAIN);
+  lv_obj_set_style_border_width(out->content, 0, LV_PART_MAIN);
+  lv_obj_set_style_pad_all(out->content, 0, LV_PART_MAIN);
+  lv_obj_clear_flag(out->content, LV_OBJ_FLAG_SCROLLABLE);
+
+  // --- Bottom dots indicator ---
+  out->dots = lv_label_create(parent);
+  lv_label_set_text(out->dots, dots_str);
+  lv_obj_set_style_text_font(out->dots, &lv_font_montserrat_20, LV_PART_MAIN);
+  lv_obj_set_style_text_color(out->dots, lv_color_hex(0x666666), LV_PART_MAIN);
+  lv_obj_set_style_text_letter_space(out->dots, 6, LV_PART_MAIN);
+  lv_obj_align(out->dots, LV_ALIGN_BOTTOM_MID, 0, -8);
+}
+
 void create_screen1() {
   if (screen1) lv_obj_clean(screen1);
   else screen1 = lv_obj_create(NULL);
-  // Dark theme background
-  lv_obj_set_style_bg_color(screen1, lv_color_hex(0x181c24), LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_bg_grad_color(screen1, lv_color_hex(0x232a34), LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_bg_grad_dir(screen1, LV_GRAD_DIR_VER, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_bg_opa(screen1, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-  // Title at the top
-  lv_obj_t *title1 = lv_label_create(screen1);
-  lv_label_set_text(title1, "KeroTrack");
-  lv_obj_set_style_text_font(title1, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_text_color(title1, lv_color_hex(0xeeeeee), LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_align(title1, LV_ALIGN_TOP_MID, 0, 8);
-
-  // Bar on the left
-  lv_obj_t *bars1 = lv_obj_create(screen1);
-  lv_obj_set_size(bars1, 40, 200);
-  lv_obj_align(bars1, LV_ALIGN_LEFT_MID, 10, 0);
-  lv_obj_set_style_bg_opa(bars1, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_border_width(bars1, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-  for (int i = 0; i < 10; i++) {
-    lv_obj_t *bar = lv_obj_create(bars1);
-    lv_obj_set_size(bar, 32, 16);
-    lv_obj_align(bar, LV_ALIGN_TOP_MID, 0, i * 18);
-    lv_obj_set_style_bg_color(bar, lv_color_hex(0x333a44), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_radius(bar, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_user_data(bar, (void*)(intptr_t)i);
-  }
-  bar_update(bars1, oilTankData.bars_remaining);
-
-  // Stats group - align with top of bar
-  int stat_x = 70;
-  int stat_y = 60; // align with top of bar
-  int stat_spacing = 45;
-  int line = 0;
-
-  // Litres remaining
-  lv_obj_t *lbl_litres1 = lv_label_create(screen1);
-  lv_label_set_text_fmt(lbl_litres1, "Litres: %.1f", oilTankData.litres_remaining);
-  lv_obj_set_style_text_font(lbl_litres1, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_text_color(lbl_litres1, lv_color_hex(0xeeeeee), LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_align(lbl_litres1, LV_ALIGN_TOP_LEFT, stat_x, stat_y + stat_spacing * line++);
-
-  // Percentage remaining
-  lv_obj_t *lbl_percent1 = lv_label_create(screen1);
-  lv_label_set_text_fmt(lbl_percent1, "%.0f%% full", oilTankData.percentage_remaining);
-  lv_obj_set_style_text_font(lbl_percent1, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_text_color(lbl_percent1, lv_color_hex(0xeeeeee), LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_align(lbl_percent1, LV_ALIGN_TOP_LEFT, stat_x, stat_y + stat_spacing * line++);
-
-  // Temperature
-  lv_obj_t *lbl_temp1 = lv_label_create(screen1);
-  lv_label_set_text_fmt(lbl_temp1, "Temp: %.1f°C", oilTankData.temperature);
-  lv_obj_set_style_text_font(lbl_temp1, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_text_color(lbl_temp1, lv_color_hex(0xeeeeee), LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_align(lbl_temp1, LV_ALIGN_TOP_LEFT, stat_x, stat_y + stat_spacing * line++);
-
-  // Days left
-  lv_obj_t *lbl_daysleft1 = lv_label_create(screen1);
-  lv_label_set_text_fmt(lbl_daysleft1, "Days left: %.0f", oilTankAnalysis.estimated_days_remaining);
-  lv_obj_set_style_text_font(lbl_daysleft1, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_text_color(lbl_daysleft1, lv_color_hex(0xeeeeee), LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_align(lbl_daysleft1, LV_ALIGN_TOP_LEFT, stat_x, stat_y + stat_spacing * line++);
+  create_chrome(screen1, &s1.chrome, "*..");
+  // Content widgets added in Task 7.
 }
 
 void create_screen2() {
   if (screen2) lv_obj_clean(screen2);
   else screen2 = lv_obj_create(NULL);
-  // Dark theme background
-  lv_obj_set_style_bg_color(screen2, lv_color_hex(0x181c24), LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_bg_grad_color(screen2, lv_color_hex(0x232a34), LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_bg_grad_dir(screen2, LV_GRAD_DIR_VER, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_bg_opa(screen2, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-  // Title at the top
-  lv_obj_t *title2 = lv_label_create(screen2);
-  lv_label_set_text(title2, "KeroTrack");
-  lv_obj_set_style_text_font(title2, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_text_color(title2, lv_color_hex(0xeeeeee), LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_align(title2, LV_ALIGN_TOP_MID, 0, 8);
-
-  // Bar on the left
-  lv_obj_t *bars2 = lv_obj_create(screen2);
-  lv_obj_set_size(bars2, 40, 200);
-  lv_obj_align(bars2, LV_ALIGN_LEFT_MID, 10, 0);
-  lv_obj_set_style_bg_opa(bars2, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_border_width(bars2, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-  for (int i = 0; i < 10; i++) {
-    lv_obj_t *bar = lv_obj_create(bars2);
-    lv_obj_set_size(bar, 32, 16);
-    lv_obj_align(bar, LV_ALIGN_TOP_MID, 0, i * 18);
-    lv_obj_set_style_bg_color(bar, lv_color_hex(0x333a44), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_radius(bar, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_user_data(bar, (void*)(intptr_t)i);
-  }
-  bar_update(bars2, oilTankData.bars_remaining);
-
-  // Stats group - align with top of bar
-  int stat_x = 70;
-  int stat_y = 60; // align with top of bar
-  int stat_spacing = 45;
-  int line = 0;
-
-  // Subtitle 'To Order'
-  lv_obj_t *lbl_order = lv_label_create(screen2);
-  lv_label_set_text(lbl_order, "To Order");
-  lv_obj_set_style_text_font(lbl_order, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_text_color(lbl_order, lv_color_hex(0xeeeeee), LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_align(lbl_order, LV_ALIGN_TOP_LEFT, stat_x, stat_y + stat_spacing * line++);
-
-  // Litres
-  lv_obj_t *lbl_to_order2 = lv_label_create(screen2);
-  lv_label_set_text_fmt(lbl_to_order2, "Litres: %.1f", oilTankData.litres_to_order);
-  lv_obj_set_style_text_font(lbl_to_order2, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_text_color(lbl_to_order2, lv_color_hex(0xeeeeee), LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_align(lbl_to_order2, LV_ALIGN_TOP_LEFT, stat_x, stat_y + stat_spacing * line++);
-
-  // PPL
-  lv_obj_t *lbl_ppl2 = lv_label_create(screen2);
-  lv_label_set_text_fmt(lbl_ppl2, "PPL: %.2f", oilTankData.current_ppl);
-  lv_obj_set_style_text_font(lbl_ppl2, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_text_color(lbl_ppl2, lv_color_hex(0xeeeeee), LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_align(lbl_ppl2, LV_ALIGN_TOP_LEFT, stat_x, stat_y + stat_spacing * line++);
-
-  // To Fill (Cost)
-  lv_obj_t *lbl_cost2 = lv_label_create(screen2);
-  lv_label_set_text_fmt(lbl_cost2, "Cost: %.2f", oilTankData.cost_to_fill);
-  lv_obj_set_style_text_font(lbl_cost2, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_text_color(lbl_cost2, lv_color_hex(0xeeeeee), LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_align(lbl_cost2, LV_ALIGN_TOP_LEFT, stat_x, stat_y + stat_spacing * line++);
+  create_chrome(screen2, &s2.chrome, ".*.");
+  // Content widgets added in Task 8.
 }
 
-void bar_update(lv_obj_t *bars_container, int bars_remaining) {
-    uint32_t child_cnt = lv_obj_get_child_cnt(bars_container);
-    for (uint32_t i = 0; i < child_cnt; i++) {
-    lv_obj_t *bar = lv_obj_get_child(bars_container, 9 - i); // fill from bottom up
-    // Always show a border
-    lv_obj_set_style_border_width(bar, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_color(bar, lv_color_hex(0x444950), LV_PART_MAIN | LV_STATE_DEFAULT); // medium gray border
-    if (i < bars_remaining) {
-      // Color gradient: green (top), yellow (mid), red (low)
-      uint32_t color = 0x1e7d3a; // dark green
-      if (bars_remaining <= 3) color = 0x8b2323; // dark red
-      else if (bars_remaining <= 6) color = 0x8b6f23; // dark yellow
-      // Optionally, make the lowest filled bar more red/yellow
-      if (bars_remaining <= 3 && i == 0) color = 0xff5555; // highlight lowest bar
-      lv_obj_set_style_bg_color(bar, lv_color_hex(color), LV_PART_MAIN | LV_STATE_DEFAULT);
-      lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
-      } else {
-      lv_obj_set_style_bg_color(bar, lv_color_hex(0x181c24), LV_PART_MAIN | LV_STATE_DEFAULT); // very dark gray
-      lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
-    }
-  }
+void create_screen3() {
+  if (screen3) lv_obj_clean(screen3);
+  else screen3 = lv_obj_create(NULL);
+  create_chrome(screen3, &s3.chrome, "..*");
+  // Content widgets added in Task 9.
 }
 
-// Update both screens when new data arrives
 void update_oiltank_ui() {
-  if (screen1) {
-    // Update bar
-    lv_obj_t *bars1 = lv_obj_get_child(screen1, 1);
-    bar_update(bars1, oilTankData.bars_remaining);
-  // Update labels
-    lv_obj_t *lbl_litres1 = lv_obj_get_child(screen1, 2);
-    lv_obj_t *lbl_percent1 = lv_obj_get_child(screen1, 3);
-    lv_obj_t *lbl_temp1 = lv_obj_get_child(screen1, 4);
-    lv_obj_t *lbl_daysleft1 = lv_obj_get_child(screen1, 5);
-    lv_label_set_text_fmt(lbl_litres1, "Litres: %.1f", oilTankData.litres_remaining);
-    lv_label_set_text_fmt(lbl_percent1, "%.0f%% full", oilTankData.percentage_remaining);
-    lv_label_set_text_fmt(lbl_daysleft1, "Days left: %.0f", oilTankAnalysis.estimated_days_remaining);
-    lv_label_set_text_fmt(lbl_temp1, "Temp: %.1f°C", oilTankData.temperature);
-  }
-  if (screen2) {
-    // Update bar
-    lv_obj_t *bars2 = lv_obj_get_child(screen2, 1);
-    bar_update(bars2, oilTankData.bars_remaining);
-    // Update labels (skip title, bar, subtitle)
-    lv_obj_t *lbl_to_order2 = lv_obj_get_child(screen2, 3);
-    lv_obj_t *lbl_ppl2 = lv_obj_get_child(screen2, 4);
-    lv_obj_t *lbl_cost2 = lv_obj_get_child(screen2, 5);
-    lv_label_set_text_fmt(lbl_to_order2, "Litres: %.1f", oilTankData.litres_to_order);
-    lv_label_set_text_fmt(lbl_ppl2, "PPL: %.2f", oilTankData.current_ppl);
-    lv_label_set_text_fmt(lbl_cost2, "Cost: %.2f", oilTankData.cost_to_fill);
-  }
+  // Per-screen update functions are added in Tasks 7/8/9.
+  // Status bar and ribbon update from a separate timer in Task 6.
 }
 
 static void parse_level(JsonDocument &doc) {

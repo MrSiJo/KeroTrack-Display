@@ -65,6 +65,24 @@ struct OilTankData {
 
 OilTankData oilTankData;
 
+struct OilTankCost {
+    float avg_daily_cost = 0;
+    float avg_weekly_cost = 0;
+    float avg_monthly_cost = 0;
+    float avg_annual_cost = 0;
+    float latest_refill_amount = 0;
+    float latest_refill_cost = 0;
+    float latest_refill_ppl = 0;
+};
+OilTankCost oilTankCost;
+
+// MQTT reconnect state
+enum MqttState { MQTT_DOWN, MQTT_RECONNECTING, MQTT_UP };
+static MqttState mqtt_state = MQTT_DOWN;
+static unsigned long last_mqtt_attempt_ms = 0;
+static unsigned long mqtt_backoff_ms = 1000;
+static unsigned long last_mqtt_msg_ms = 0;  // wall-clock of last received message
+
 // Oil tank UI objects
 static lv_obj_t *screen1 = nullptr;
 static lv_obj_t *screen2 = nullptr;
@@ -88,6 +106,7 @@ void switch_screen();
 void auto_switch_cb(lv_timer_t *timer);
 void bar_update(lv_obj_t *bars_container, int bars_remaining);
 void show_boot_screen();
+void update_oiltank_ui();
 
 void touchscreen_read(lv_indev_t *indev, lv_indev_data_t *data) {
   if (touchscreen.tirqTouched() && touchscreen.touched()) {
@@ -223,6 +242,10 @@ void setup() {
         Serial.println("Subscribed to topic: oiltank/level");
         mqttClient.subscribe("oiltank/analysis");
         Serial.println("Subscribed to topic: oiltank/analysis");
+        mqttClient.subscribe("oiltank/cost_analysis");
+        Serial.println("Subscribed to topic: oiltank/cost_analysis");
+        mqtt_state = MQTT_UP;
+        mqtt_backoff_ms = 1000;
         mqttConnected = true;
       } else {
         Serial.println("MQTT connect failed, retrying...");
@@ -272,10 +295,41 @@ void setup() {
   Serial.println("Setup complete");
 }
 
+static void mqtt_try_reconnect() {
+  if (!mqtt_is_configured) return;
+  if (mqttClient.connected()) {
+    if (mqtt_state != MQTT_UP) {
+      mqtt_state = MQTT_UP;
+      mqtt_backoff_ms = 1000;
+    }
+    return;
+  }
+  mqtt_state = MQTT_RECONNECTING;
+  unsigned long now = millis();
+  if (now - last_mqtt_attempt_ms < mqtt_backoff_ms) return;
+  last_mqtt_attempt_ms = now;
+  Serial.print("MQTT reconnect attempt (backoff "); Serial.print(mqtt_backoff_ms); Serial.println("ms)");
+  if (mqttClient.connect("KeroTankClient", mqtt_user, mqtt_pass)) {
+    Serial.println("MQTT reconnected; resubscribing");
+    mqttClient.subscribe("oiltank/level");
+    mqttClient.subscribe("oiltank/analysis");
+    mqttClient.subscribe("oiltank/cost_analysis");
+    mqtt_state = MQTT_UP;
+    mqtt_backoff_ms = 1000;
+  } else {
+    if      (mqtt_backoff_ms < 2000)  mqtt_backoff_ms = 2000;
+    else if (mqtt_backoff_ms < 5000)  mqtt_backoff_ms = 5000;
+    else if (mqtt_backoff_ms < 15000) mqtt_backoff_ms = 15000;
+    else if (mqtt_backoff_ms < 30000) mqtt_backoff_ms = 30000;
+    else                              mqtt_backoff_ms = 60000;
+  }
+}
+
 void loop() {
   lv_timer_handler();
   if (mqtt_is_configured) {
     mqttClient.loop();
+    mqtt_try_reconnect();
   }
   lv_tick_inc(5);
   delay(5);
@@ -470,58 +524,74 @@ void update_oiltank_ui() {
   }
 }
 
+static void parse_level(JsonDocument &doc) {
+  if (!doc["date"].isNull()) oilTankData.date = doc["date"].as<String>();
+  if (!doc["id"].isNull()) oilTankData.id = doc["id"].as<int>();
+  if (!doc["temperature"].isNull()) oilTankData.temperature = doc["temperature"].as<float>();
+  if (!doc["litres_remaining"].isNull()) oilTankData.litres_remaining = doc["litres_remaining"].as<float>();
+  if (!doc["litres_used_since_last"].isNull()) oilTankData.litres_used_since_last = doc["litres_used_since_last"].as<float>();
+  if (!doc["percentage_remaining"].isNull()) oilTankData.percentage_remaining = doc["percentage_remaining"].as<float>();
+  if (!doc["oil_depth_cm"].isNull()) oilTankData.oil_depth_cm = doc["oil_depth_cm"].as<float>();
+  if (!doc["air_gap_cm"].isNull()) oilTankData.air_gap_cm = doc["air_gap_cm"].as<float>();
+  if (!doc["current_ppl"].isNull()) oilTankData.current_ppl = doc["current_ppl"].as<float>();
+  if (!doc["cost_used"].isNull()) oilTankData.cost_used = doc["cost_used"].as<float>();
+  if (!doc["cost_to_fill"].isNull()) {
+    if (doc["cost_to_fill"].is<const char*>()) {
+      oilTankData.cost_to_fill = atof(doc["cost_to_fill"].as<const char*>());
+    } else {
+      oilTankData.cost_to_fill = doc["cost_to_fill"].as<float>();
+    }
+  }
+  if (!doc["heating_degree_days"].isNull()) oilTankData.heating_degree_days = doc["heating_degree_days"].as<int>();
+  if (!doc["seasonal_efficiency"].isNull()) oilTankData.seasonal_efficiency = doc["seasonal_efficiency"].as<float>();
+  if (!doc["refill_detected"].isNull()) oilTankData.refill_detected = doc["refill_detected"].as<String>();
+  if (!doc["leak_detected"].isNull()) oilTankData.leak_detected = doc["leak_detected"].as<String>();
+  if (!doc["raw_flags"].isNull()) oilTankData.raw_flags = doc["raw_flags"].as<int>();
+  if (!doc["litres_to_order"].isNull()) oilTankData.litres_to_order = doc["litres_to_order"].as<float>();
+  if (!doc["bars_remaining"].isNull()) oilTankData.bars_remaining = doc["bars_remaining"].as<int>();
+}
+
+static void parse_analysis(JsonDocument &doc) {
+  if (!doc["estimated_days_remaining"].isNull())
+    oilTankAnalysis.estimated_days_remaining = doc["estimated_days_remaining"].as<float>();
+  // Additional analysis fields are populated in Task 4.
+}
+
+static void parse_cost(JsonDocument &doc) {
+  if (!doc["avg_daily_cost"].isNull())   oilTankCost.avg_daily_cost   = doc["avg_daily_cost"].as<float>();
+  if (!doc["avg_weekly_cost"].isNull())  oilTankCost.avg_weekly_cost  = doc["avg_weekly_cost"].as<float>();
+  if (!doc["avg_monthly_cost"].isNull()) oilTankCost.avg_monthly_cost = doc["avg_monthly_cost"].as<float>();
+  if (!doc["avg_annual_cost"].isNull())  oilTankCost.avg_annual_cost  = doc["avg_annual_cost"].as<float>();
+  if (!doc["latest_refill_amount"].isNull()) oilTankCost.latest_refill_amount = doc["latest_refill_amount"].as<float>();
+  if (!doc["latest_refill_cost"].isNull())   oilTankCost.latest_refill_cost   = doc["latest_refill_cost"].as<float>();
+  if (!doc["latest_refill_ppl"].isNull())    oilTankCost.latest_refill_ppl    = doc["latest_refill_ppl"].as<float>();
+}
+
 void mqtt_callback(char* topic, byte* payload, unsigned int length) {
-  Serial.print("MQTT message received on topic: '");
-  Serial.print(topic);
-  Serial.println("'");
-  Serial.print("Payload: ");
-  for (unsigned int i = 0; i < length; i++) {
-    Serial.print((char)payload[i]);
+  Serial.print("MQTT message on '"); Serial.print(topic);
+  Serial.print("' ("); Serial.print(length); Serial.println(" bytes)");
+
+  JsonDocument doc;
+  DeserializationError err = deserializeJson(doc, payload, length);
+  if (err) {
+    Serial.print("deserializeJson() failed: ");
+    Serial.println(err.c_str());
+    return;
   }
-  Serial.println();
-  payload[length] = '\0';
-  // Print JSON payload as string
-  Serial.print("JSON payload: ");
-  Serial.println((char*)payload);
+
   if (strcmp(topic, "oiltank/level") == 0) {
-    DynamicJsonDocument doc(512); // Reduced buffer size
-    DeserializationError err = deserializeJson(doc, payload);
-    if (err) {
-      Serial.print("deserializeJson() failed: ");
-      Serial.println(err.c_str());
-      return;
-    }
-      if (doc.containsKey("date")) oilTankData.date = doc["date"].as<String>();
-      if (doc.containsKey("id")) oilTankData.id = doc["id"].as<int>();
-      if (doc.containsKey("temperature")) oilTankData.temperature = doc["temperature"].as<float>();
-      if (doc.containsKey("litres_remaining")) oilTankData.litres_remaining = doc["litres_remaining"].as<float>();
-      if (doc.containsKey("litres_used_since_last")) oilTankData.litres_used_since_last = doc["litres_used_since_last"].as<float>();
-      if (doc.containsKey("percentage_remaining")) oilTankData.percentage_remaining = doc["percentage_remaining"].as<float>();
-      if (doc.containsKey("oil_depth_cm")) oilTankData.oil_depth_cm = doc["oil_depth_cm"].as<float>();
-      if (doc.containsKey("air_gap_cm")) oilTankData.air_gap_cm = doc["air_gap_cm"].as<float>();
-      if (doc.containsKey("current_ppl")) oilTankData.current_ppl = doc["current_ppl"].as<float>();
-      if (doc.containsKey("cost_used")) oilTankData.cost_used = doc["cost_used"].as<float>();
-    if (doc.containsKey("cost_to_fill")) oilTankData.cost_to_fill = atof(doc["cost_to_fill"].as<const char*>());
-      if (doc.containsKey("heating_degree_days")) oilTankData.heating_degree_days = doc["heating_degree_days"].as<int>();
-      if (doc.containsKey("seasonal_efficiency")) oilTankData.seasonal_efficiency = doc["seasonal_efficiency"].as<float>();
-      if (doc.containsKey("refill_detected")) oilTankData.refill_detected = doc["refill_detected"].as<String>();
-      if (doc.containsKey("leak_detected")) oilTankData.leak_detected = doc["leak_detected"].as<String>();
-      if (doc.containsKey("raw_flags")) oilTankData.raw_flags = doc["raw_flags"].as<int>();
-      if (doc.containsKey("litres_to_order")) oilTankData.litres_to_order = doc["litres_to_order"].as<float>();
-      if (doc.containsKey("bars_remaining")) oilTankData.bars_remaining = doc["bars_remaining"].as<int>();
-      update_oiltank_ui();
+    parse_level(doc);
   } else if (strcmp(topic, "oiltank/analysis") == 0) {
-    DynamicJsonDocument doc(512);
-    DeserializationError err = deserializeJson(doc, payload);
-    if (err) {
-      Serial.print("deserializeJson() failed (analysis): ");
-      Serial.println(err.c_str());
-      return;
-    }
-    if (doc.containsKey("estimated_days_remaining"))
-      oilTankAnalysis.estimated_days_remaining = doc["estimated_days_remaining"].as<float>();
-    update_oiltank_ui();
+    parse_analysis(doc);
+  } else if (strcmp(topic, "oiltank/cost_analysis") == 0) {
+    parse_cost(doc);
+  } else {
+    Serial.println("Unknown topic, ignoring.");
+    return;
   }
+
+  last_mqtt_msg_ms = millis();
+  update_oiltank_ui();
 }
 
 void show_setup_screen() {

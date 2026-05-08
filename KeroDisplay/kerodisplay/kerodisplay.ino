@@ -205,14 +205,27 @@ typedef struct {
   lv_obj_t *lbl_ppl;
 } screen3_widgets_t;
 
+typedef struct {
+  screen_chrome_t chrome;
+  lv_obj_t *icon_hero;        // big weather icon (20x20 native, scaled 3x)
+  lv_obj_t *lbl_temp;         // big current temp
+  lv_obj_t *lbl_descriptor;   // "feels Y° · Light rain"
+  lv_obj_t *lbl_location;     // location name
+  lv_obj_t *daily_icon[3];    // 3-day forecast row icons (20x20 native)
+  lv_obj_t *daily_day[3];     // "Today" / day-of-week labels
+  lv_obj_t *daily_range[3];   // "14° / 8°" temp ranges
+} screen4_widgets_t;
+
 static screen1_widgets_t s1;
 static screen2_widgets_t s2;
 static screen3_widgets_t s3;
+static screen4_widgets_t s4;
 
 // Oil tank UI objects
 static lv_obj_t *screen1 = nullptr;
 static lv_obj_t *screen2 = nullptr;
 static lv_obj_t *screen3 = nullptr;
+static lv_obj_t *screen4 = nullptr;
 static int current_screen = 1;
 static lv_timer_t *auto_switch_timer = nullptr;
 
@@ -236,6 +249,7 @@ OilTankAnalysis oilTankAnalysis;
 void create_screen1();
 void create_screen2();
 void create_screen3();
+void create_screen4();
 void switch_screen();
 void auto_switch_cb(lv_timer_t *timer);
 void show_boot_screen();
@@ -251,7 +265,7 @@ static int geocode_location(const char *query, GeocodeMatch *out, int max_result
 static bool fetch_weather();
 static void weather_task(void *param);
 static void weather_task_start();
-static void update_screen4();  // defined in a future task; declare so async_call can reference it
+static void update_screen4();
 
 void touchscreen_read(lv_indev_t *indev, lv_indev_data_t *data) {
   if (touchscreen.tirqTouched() && touchscreen.touched()) {
@@ -622,7 +636,6 @@ static int geocode_location(const char *query, GeocodeMatch *out, int max_result
 // Schedule a UI repaint of screen 4 on the LVGL thread. Safe to call from
 // the weather task. The lambda fires on the LVGL timer thread.
 static void schedule_screen4_update_cb(void *unused) {
-  // update_screen4() is defined in a later task; until then this is a no-op.
   update_screen4();
 }
 
@@ -1238,6 +1251,71 @@ void create_screen3() {
   lv_obj_align(ppl_label, LV_ALIGN_TOP_RIGHT, -15, 207);
 }
 
+void create_screen4() {
+  if (screen4) lv_obj_clean(screen4);
+  else screen4 = lv_obj_create(NULL);
+  create_chrome(screen4, &s4.chrome, "...*");
+
+  lv_obj_t *c = s4.chrome.content;
+
+  // Hero weather icon (20x20 native, scaled 3x = 60 visible).
+  s4.icon_hero = lv_image_create(c);
+  lv_image_set_src(s4.icon_hero, &icon_cloudy);
+  lv_image_set_scale(s4.icon_hero, 768);  // 3x in LVGL units (256 = 1x)
+  lv_obj_align(s4.icon_hero, LV_ALIGN_TOP_MID, 0, 25);
+  lv_obj_add_flag(s4.icon_hero, LV_OBJ_FLAG_EVENT_BUBBLE);
+
+  // Big current temperature (using Latin font for ° support).
+  s4.lbl_temp = lv_label_create(c);
+  lv_label_set_text(s4.lbl_temp, "--°");
+  lv_obj_set_style_text_font(s4.lbl_temp, &lv_font_montserrat_latin_42, LV_PART_MAIN);
+  lv_obj_set_style_text_color(s4.lbl_temp, lv_color_hex(0xeeeeee), LV_PART_MAIN);
+  lv_obj_align(s4.lbl_temp, LV_ALIGN_TOP_MID, 0, 95);
+
+  // Feels-like + condition descriptor.
+  s4.lbl_descriptor = lv_label_create(c);
+  lv_label_set_text(s4.lbl_descriptor, "");
+  lv_obj_set_style_text_font(s4.lbl_descriptor, &lv_font_montserrat_latin_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(s4.lbl_descriptor, lv_color_hex(0xaaaaaa), LV_PART_MAIN);
+  lv_obj_align(s4.lbl_descriptor, LV_ALIGN_TOP_MID, 0, 142);
+
+  // Location name.
+  s4.lbl_location = lv_label_create(c);
+  lv_label_set_text(s4.lbl_location, "(not configured)");
+  lv_obj_set_style_text_font(s4.lbl_location, &lv_font_montserrat_latin_14, LV_PART_MAIN);
+  lv_obj_set_style_text_color(s4.lbl_location, lv_color_hex(0x888888), LV_PART_MAIN);
+  lv_obj_align(s4.lbl_location, LV_ALIGN_TOP_MID, 0, 160);
+
+  // Divider.
+  lv_obj_t *div = lv_obj_create(c);
+  lv_obj_set_size(div, 80, 1);
+  lv_obj_set_style_bg_color(div, lv_color_hex(0x444b58), LV_PART_MAIN);
+  lv_obj_set_style_border_width(div, 0, LV_PART_MAIN);
+  lv_obj_align(div, LV_ALIGN_TOP_MID, 0, 182);
+
+  // 3-day forecast rows: icon | day name | high/low.
+  for (int i = 0; i < 3; i++) {
+    int y = 192 + i * 22;
+
+    s4.daily_icon[i] = lv_image_create(c);
+    lv_image_set_src(s4.daily_icon[i], &icon_cloudy);
+    lv_obj_align(s4.daily_icon[i], LV_ALIGN_TOP_LEFT, 30, y);
+    lv_obj_add_flag(s4.daily_icon[i], LV_OBJ_FLAG_EVENT_BUBBLE);
+
+    s4.daily_day[i] = lv_label_create(c);
+    lv_label_set_text(s4.daily_day[i], "---");
+    lv_obj_set_style_text_font(s4.daily_day[i], &lv_font_montserrat_latin_14, LV_PART_MAIN);
+    lv_obj_set_style_text_color(s4.daily_day[i], lv_color_hex(0xeeeeee), LV_PART_MAIN);
+    lv_obj_align(s4.daily_day[i], LV_ALIGN_TOP_LEFT, 65, y + 3);
+
+    s4.daily_range[i] = lv_label_create(c);
+    lv_label_set_text(s4.daily_range[i], "--/--");
+    lv_obj_set_style_text_font(s4.daily_range[i], &lv_font_montserrat_latin_14, LV_PART_MAIN);
+    lv_obj_set_style_text_color(s4.daily_range[i], lv_color_hex(0xeeeeee), LV_PART_MAIN);
+    lv_obj_align(s4.daily_range[i], LV_ALIGN_TOP_RIGHT, -30, y + 3);
+  }
+}
+
 // Format "2026-08-23 14:32:00" -> "23 Aug 2026". Returns false on parse failure.
 static bool format_empty_date(const String &iso, char *out, size_t cap) {
   if (iso.length() < 10) return false;
@@ -1363,6 +1441,76 @@ static void update_screen3() {
   }
 }
 
+static void update_screen4() {
+  if (!screen4) return;
+  char buf[64];
+
+  bool configured = strlen(weather_location) > 0;
+  bool data_valid = weatherData.valid;
+
+  // -- "Not configured" state --
+  if (!configured) {
+    lv_obj_add_flag(s4.icon_hero, LV_OBJ_FLAG_HIDDEN);
+    lv_label_set_text(s4.lbl_temp, "--");
+    lv_label_set_text(s4.lbl_descriptor, "Weather not configured");
+    lv_label_set_text(s4.lbl_location, "Set location in web settings");
+    for (int i = 0; i < 3; i++) {
+      lv_obj_add_flag(s4.daily_icon[i], LV_OBJ_FLAG_HIDDEN);
+      lv_label_set_text(s4.daily_day[i], "");
+      lv_label_set_text(s4.daily_range[i], "");
+    }
+    return;
+  }
+
+  // -- "Fetching" state (location set, but no data yet) --
+  if (!data_valid) {
+    lv_obj_add_flag(s4.icon_hero, LV_OBJ_FLAG_HIDDEN);
+    lv_label_set_text(s4.lbl_temp, "--");
+    lv_label_set_text(s4.lbl_descriptor, "Fetching forecast...");
+    lv_label_set_text(s4.lbl_location, weather_location);
+    for (int i = 0; i < 3; i++) {
+      lv_obj_add_flag(s4.daily_icon[i], LV_OBJ_FLAG_HIDDEN);
+      lv_label_set_text(s4.daily_day[i], "");
+      lv_label_set_text(s4.daily_range[i], "");
+    }
+    return;
+  }
+
+  // -- Active state --
+  lv_obj_clear_flag(s4.icon_hero, LV_OBJ_FLAG_HIDDEN);
+  lv_image_set_src(s4.icon_hero, choose_icon(weatherData.code_now, weatherData.is_day));
+
+  snprintf(buf, sizeof(buf), "%.0f\xc2\xb0", weatherData.temp_now);
+  lv_label_set_text(s4.lbl_temp, buf);
+
+  snprintf(buf, sizeof(buf), "feels %.0f\xc2\xb0 \xc2\xb7 %s",
+           weatherData.temp_feels, describe_weather(weatherData.code_now));
+  lv_label_set_text(s4.lbl_descriptor, buf);
+
+  lv_label_set_text(s4.lbl_location, weather_location);
+
+  static const char *DOW[] = {"Sun","Mon","Tue","Wed","Thu","Fri","Sat"};
+  time_t now_t = time(nullptr);
+
+  for (int i = 0; i < 3; i++) {
+    lv_obj_clear_flag(s4.daily_icon[i], LV_OBJ_FLAG_HIDDEN);
+    lv_image_set_src(s4.daily_icon[i], choose_icon(weatherData.daily[i].weather_code, true));
+
+    if (i == 0) {
+      lv_label_set_text(s4.daily_day[i], "Today");
+    } else {
+      time_t day_t = now_t + (time_t)i * 86400;
+      struct tm t;
+      localtime_r(&day_t, &t);
+      lv_label_set_text(s4.daily_day[i], DOW[t.tm_wday]);
+    }
+
+    snprintf(buf, sizeof(buf), "%.0f\xc2\xb0 / %.0f\xc2\xb0",
+             weatherData.daily[i].temp_max, weatherData.daily[i].temp_min);
+    lv_label_set_text(s4.daily_range[i], buf);
+  }
+}
+
 static void apply_leak_to(screen_chrome_t *ch, bool leak) {
   if (leak) {
     lv_obj_clear_flag(ch->ribbon, LV_OBJ_FLAG_HIDDEN);
@@ -1381,9 +1529,6 @@ static void apply_leak_state() {
   apply_leak_to(&s2.chrome, leak);
   apply_leak_to(&s3.chrome, leak);
 }
-
-// Defined in a future task; stub for now so weather data flow works.
-static void update_screen4() { /* no-op until screen 4 is built */ }
 
 void update_oiltank_ui() {
   apply_leak_state();

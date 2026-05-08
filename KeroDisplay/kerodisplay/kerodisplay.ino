@@ -785,13 +785,13 @@ void create_screen3() {
   lv_label_set_text(s3.lbl_ppl, "--");
   lv_obj_set_style_text_font(s3.lbl_ppl, &lv_font_montserrat_28, LV_PART_MAIN);
   lv_obj_set_style_text_color(s3.lbl_ppl, lv_color_hex(0xeeeeee), LV_PART_MAIN);
-  lv_obj_align(s3.lbl_ppl, LV_ALIGN_TOP_RIGHT, -15, 175);
+  lv_obj_align(s3.lbl_ppl, LV_ALIGN_TOP_RIGHT, -15, 169);
 
   lv_obj_t *ppl_label = lv_label_create(c);
   lv_label_set_text(ppl_label, "current p/L");
   lv_obj_set_style_text_font(ppl_label, &lv_font_montserrat_14, LV_PART_MAIN);
   lv_obj_set_style_text_color(ppl_label, lv_color_hex(0x888888), LV_PART_MAIN);
-  lv_obj_align(ppl_label, LV_ALIGN_TOP_RIGHT, -15, 215);
+  lv_obj_align(ppl_label, LV_ALIGN_TOP_RIGHT, -15, 207);
 }
 
 // Format "2026-08-23 14:32:00" -> "23 Aug 2026". Returns false on parse failure.

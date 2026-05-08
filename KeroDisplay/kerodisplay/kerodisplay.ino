@@ -25,6 +25,7 @@
 static const uint32_t SCREEN1_HOLD_MS = 60000;
 static const uint32_t SCREEN2_HOLD_MS = 30000;
 static const uint32_t SCREEN3_HOLD_MS = 30000;
+static const uint32_t SCREEN4_HOLD_MS = 30000;
 #define MIN_ORDER_LITRES 500
 
 SPIClass touchscreenSPI = SPIClass(VSPI);
@@ -440,6 +441,7 @@ void setup() {
   create_screen1();
   create_screen2();
   create_screen3();
+  create_screen4();
   lv_scr_load(screen1);
   current_screen = 1;
   // Set up auto-switch timer with screen-1 hold duration; load_screen() updates
@@ -457,6 +459,7 @@ void setup() {
   lv_obj_add_event_cb(screen1, tap_cb, LV_EVENT_CLICKED, NULL);
   lv_obj_add_event_cb(screen2, tap_cb, LV_EVENT_CLICKED, NULL);
   lv_obj_add_event_cb(screen3, tap_cb, LV_EVENT_CLICKED, NULL);
+  lv_obj_add_event_cb(screen4, tap_cb, LV_EVENT_CLICKED, NULL);
   lv_timer_create(update_status_bars_cb, 1000, NULL);
 
   // NTP time sync
@@ -1045,7 +1048,7 @@ static void create_chrome(lv_obj_t *parent, screen_chrome_t *out, const char *do
 void create_screen1() {
   if (screen1) lv_obj_clean(screen1);
   else screen1 = lv_obj_create(NULL);
-  create_chrome(screen1, &s1.chrome, "*..");
+  create_chrome(screen1, &s1.chrome, "*...");
 
   lv_obj_t *c = s1.chrome.content;
 
@@ -1090,7 +1093,7 @@ void create_screen1() {
 void create_screen2() {
   if (screen2) lv_obj_clean(screen2);
   else screen2 = lv_obj_create(NULL);
-  create_chrome(screen2, &s2.chrome, ".*.");
+  create_chrome(screen2, &s2.chrome, ".*..");
 
   lv_obj_t *c = s2.chrome.content;
 
@@ -1167,7 +1170,7 @@ void create_screen2() {
 void create_screen3() {
   if (screen3) lv_obj_clean(screen3);
   else screen3 = lv_obj_create(NULL);
-  create_chrome(screen3, &s3.chrome, "..*");
+  create_chrome(screen3, &s3.chrome, "..*.");
 
   lv_obj_t *c = s3.chrome.content;
 
@@ -1528,6 +1531,7 @@ static void apply_leak_state() {
   apply_leak_to(&s1.chrome, leak);
   apply_leak_to(&s2.chrome, leak);
   apply_leak_to(&s3.chrome, leak);
+  apply_leak_to(&s4.chrome, leak);
 }
 
 void update_oiltank_ui() {
@@ -1589,6 +1593,7 @@ static void update_status_bars_cb(lv_timer_t *t) {
   update_one_status_bar(&s1.chrome.sb);
   update_one_status_bar(&s2.chrome.sb);
   update_one_status_bar(&s3.chrome.sb);
+  update_one_status_bar(&s4.chrome.sb);
 }
 
 static void parse_level(JsonDocument &doc) {
@@ -1709,7 +1714,8 @@ static uint32_t hold_for(int screen) {
   switch (screen) {
     case 1: return SCREEN1_HOLD_MS;
     case 2: return SCREEN2_HOLD_MS;
-    default: return SCREEN3_HOLD_MS;
+    case 3: return SCREEN3_HOLD_MS;
+    default: return SCREEN4_HOLD_MS;
   }
 }
 
@@ -1718,7 +1724,8 @@ static void load_screen(int n) {
   switch (n) {
     case 1: lv_scr_load(screen1); break;
     case 2: lv_scr_load(screen2); break;
-    default: n = 3; lv_scr_load(screen3); break;
+    case 3: lv_scr_load(screen3); break;
+    default: n = 4; lv_scr_load(screen4); break;
   }
   if (auto_switch_timer) {
     lv_timer_set_period(auto_switch_timer, hold_for(n));
@@ -1728,7 +1735,7 @@ static void load_screen(int n) {
 
 void switch_screen() {
   int next = current_screen + 1;
-  if (next > 3) next = 1;
+  if (next > 4) next = 1;
   load_screen(next);
 }
 
